@@ -1,18 +1,28 @@
 # DeepSeek Harness
 
-![Quanta logo](apps/tauri-shell/assets/quanta-logo.png)
-
-欢迎加入我们的 Discord 社区：[加入 Discord](https://discord.com/invite/xJ562EPafb)。
-
 [English](README.md) | 中文
+
+## 上游项目：DeepSeek Harness
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
 它采用**一切皆插件**的架构，并由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
 
-## 开发者预览
+## 上游开发者预览
 
 DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
+
+---
+
+## QuantaBricks 桌面壳
+
+<img src="apps/tauri-shell/assets/quanta-logo.png" alt="QuantaBricks" width="160" />
+
+QuantaBricks 在 Harness Web 外增加了独立的 Tauri 桌面壳。后续工作将面向化学模拟工作流进行适配。
+
+欢迎加入我们的 Discord 社区：[加入 Discord](https://discord.com/invite/xJ562EPafb)。
+
+---
 
 ## 运行
 

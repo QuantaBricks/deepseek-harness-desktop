@@ -1,18 +1,28 @@
 # DeepSeek Harness
 
-![Quanta logo](apps/tauri-shell/assets/quanta-logo.png)
-
-Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562EPafb).
-
 English | [中文](README.zh.md)
+
+## Upstream project: DeepSeek Harness
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
 It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
 
-## Developer preview
+## Upstream developer preview
 
 DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
+
+---
+
+## QuantaBricks desktop shell
+
+<img src="apps/tauri-shell/assets/quanta-logo.png" alt="QuantaBricks" width="160" />
+
+QuantaBricks adds a separate Tauri desktop shell around Harness Web. Planned work focuses on adaptations for chemical simulation workflows.
+
+Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562EPafb).
+
+---
 
 ## Run
 
