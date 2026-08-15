@@ -1,5 +1,7 @@
 ![Quanta logo](assets/quanta-logo.png)
 
+Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562EPafb).
+
 # Tauri shell
 
 This directory is an intentionally separate desktop shell for the Harness Web UI.
