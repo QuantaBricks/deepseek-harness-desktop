@@ -1,5 +1,9 @@
 # DeepSeek Harness
 
+![Quanta logo](apps/tauri-shell/assets/quanta-logo.png)
+
+Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562EPafb).
+
 English | [中文](README.zh.md)
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).

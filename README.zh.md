@@ -1,5 +1,9 @@
 # DeepSeek Harness
 
+![Quanta logo](apps/tauri-shell/assets/quanta-logo.png)
+
+欢迎加入我们的 Discord 社区：[加入 Discord](https://discord.com/invite/xJ562EPafb)。
+
 [English](README.md) | 中文
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
