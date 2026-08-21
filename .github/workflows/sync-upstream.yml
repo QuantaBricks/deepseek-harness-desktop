@@ -119,10 +119,10 @@ jobs:
           VERSION: ${{ steps.sync.outputs.version }}
           RELEASE_SHA: ${{ steps.commit.outputs.sha || steps.current.outputs.sha }}
         run: |
-          $assets = @(
-            "tauri-core/src-tauri/target/release/bundle/msi/*-setup.msi",
-            "tauri-core/src-tauri/target/release/bundle/nsis/*-setup.exe",
-            "tauri-core/src-tauri/target/release/bundle/nsis/*-setup.exe.sig",
-            "tauri-core/src-tauri/target/release/bundle/nsis/latest.json"
-          )
+          $assets = Get-ChildItem tauri-core/src-tauri/target/release/bundle -Recurse -File |
+            Where-Object { $_.Extension -in '.msi', '.exe', '.sig' -or $_.Name -eq 'latest.json' } |
+            ForEach-Object { $_.FullName }
+          if ($assets.Count -eq 0) {
+            throw 'Tauri build did not produce release assets.'
+          }
           gh release create $env:TAG --target $env:RELEASE_SHA --title "DeepSeek Harness Desktop $env:VERSION" --generate-notes $assets
