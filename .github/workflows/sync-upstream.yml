@@ -45,14 +45,17 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git remote add upstream https://github.com/deepseek-ai/deepseek-harness.git
           git fetch upstream master --tags
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $forceRelease = '${{ inputs.force_release }}' -eq 'true'
-          if (git merge-base --is-ancestor upstream/master HEAD) {
-            if (-not $forceRelease) {
+          git merge-base --is-ancestor upstream/master HEAD
+          $upstreamIsCurrent = $LASTEXITCODE -eq 0
+          if (-not $forceRelease) {
+            if ($upstreamIsCurrent) {
               'publish=false' >> $env:GITHUB_OUTPUT
               exit 0
             }
-          } else {
             git merge --no-edit upstream/master
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           $commit = git rev-parse HEAD
           $version = "0.1.$env:GITHUB_RUN_NUMBER"
