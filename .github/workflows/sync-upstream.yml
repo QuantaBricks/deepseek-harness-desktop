@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       force_release:
-        description: Build and publish current main when upstream has no new commits
-        required: true
-        type: boolean
+        description: Publish a new Windows release without an upstream change
+        required: false
         default: false
+        type: boolean
   schedule:
     - cron: '41 1 * * *'
 
@@ -15,113 +15,109 @@ permissions:
   contents: write
 
 concurrency:
-  group: sync-upstream-harness
+  group: harness-desktop-release
   cancel-in-progress: false
 
-env:
-  DSH_TELEMETRY_DISABLED: '1'
-
 jobs:
-  sync:
+  sync-and-publish:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out desktop repository
+        uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
+          submodules: recursive
 
-      - uses: pnpm/action-setup@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
+          cache-dependency-path: deepseek-harness/pnpm-lock.yaml
 
-      - name: Merge the latest Harness core
+      - name: Update official Harness submodule
         id: sync
         shell: pwsh
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git remote add upstream https://github.com/deepseek-ai/deepseek-harness.git
-          git fetch upstream master --tags
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C deepseek-harness fetch origin master
+          $pinned = git -C deepseek-harness rev-parse HEAD
+          $official = git -C deepseek-harness rev-parse origin/master
           $forceRelease = '${{ inputs.force_release }}' -eq 'true'
-          $merged = $false
-          git merge-base --is-ancestor upstream/master HEAD
-          $upstreamIsCurrent = $LASTEXITCODE -eq 0
-          if (-not $forceRelease) {
-            if ($upstreamIsCurrent) {
-              'publish=false' >> $env:GITHUB_OUTPUT
-              exit 0
-            }
-            git merge --no-edit upstream/master
-            $merged = $true
-            if ($LASTEXITCODE -ne 0) {
-              foreach ($file in 'README.md', 'README.zh.md', 'README.i18n.yaml') {
-                git checkout --ours -- $file
-                git add -- $file
-              }
-              $unresolved = git diff --name-only --diff-filter=U
-              if ($unresolved) { exit 1 }
-              git commit --no-edit
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            }
+          $changed = $pinned -ne $official
+
+          if ($changed) {
+            git -C deepseek-harness checkout --detach $official
+            git add deepseek-harness
           }
-          $commit = git rev-parse HEAD
-          $version = "0.1.$env:GITHUB_RUN_NUMBER"
+
+          if (-not $changed -and -not $forceRelease) {
+            "publish=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
           "publish=true" >> $env:GITHUB_OUTPUT
-          "commit=$commit" >> $env:GITHUB_OUTPUT
-          "merged=$merged" >> $env:GITHUB_OUTPUT
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "tag=desktop-v$version" >> $env:GITHUB_OUTPUT
+          "source_updated=$changed" >> $env:GITHUB_OUTPUT
+          "version=0.1.$env:GITHUB_RUN_NUMBER" >> $env:GITHUB_OUTPUT
+          "tag=desktop-v0.1.$env:GITHUB_RUN_NUMBER" >> $env:GITHUB_OUTPUT
 
-      - name: Install dependencies
+      - name: Install Harness dependencies
         if: steps.sync.outputs.publish == 'true'
-        run: pnpm install --frozen-lockfile
+        run: pnpm --dir deepseek-harness install --frozen-lockfile
 
-      - name: Build Harness Web
+      - name: Build Harness Web UI
         if: steps.sync.outputs.publish == 'true'
-        run: pnpm run build
+        run: pnpm --dir deepseek-harness run build
 
       - name: Install Rust
         if: steps.sync.outputs.publish == 'true'
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build signed Windows installers
+      - name: Build signed Windows installer
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          $config = Join-Path $env:RUNNER_TEMP 'tauri-release.json'
-          @{ version = $env:DESKTOP_VERSION } | ConvertTo-Json -Compress | Set-Content $config
-          pnpm --dir apps/tauri-shell exec tauri build --config $config
+          $config = Get-Content tauri-core/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $config.version = $env:DESKTOP_VERSION
+          $config | ConvertTo-Json -Depth 100 | Set-Content tauri-core/src-tauri/tauri.release.conf.json -Encoding utf8
+          pnpm --dir tauri-core exec tauri build --config src-tauri/tauri.release.conf.json
 
-      - name: Update main
-        if: steps.sync.outputs.publish == 'true' && steps.sync.outputs.merged == 'True'
-        run: git push origin HEAD:main
+      - name: Commit updated Harness pointer
+        if: steps.sync.outputs.publish == 'true' && steps.sync.outputs.source_updated == 'True'
+        id: commit
+        shell: pwsh
+        run: |
+          git commit -m "chore: sync DeepSeek Harness"
+          git push origin HEAD:main
+          "sha=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
 
-      - name: Publish Windows release
+      - name: Choose release commit
+        if: steps.sync.outputs.publish == 'true' && steps.sync.outputs.source_updated != 'True'
+        id: current
+        shell: pwsh
+        run: '"sha=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT'
+
+      - name: Publish GitHub Release
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
-          DESKTOP_TAG: ${{ steps.sync.outputs.tag }}
-          SYNC_COMMIT: ${{ steps.sync.outputs.commit }}
+          TAG: ${{ steps.sync.outputs.tag }}
+          VERSION: ${{ steps.sync.outputs.version }}
+          RELEASE_SHA: ${{ steps.commit.outputs.sha || steps.current.outputs.sha }}
         run: |
-          $nsis = Get-ChildItem 'apps/tauri-shell/src-tauri/target/release/bundle/nsis/*-setup.exe' | Select-Object -First 1
-          $msi = Get-ChildItem 'apps/tauri-shell/src-tauri/target/release/bundle/msi/*.msi' | Select-Object -First 1
-          $signature = (Get-Content "$($nsis.FullName).sig" -Raw).Trim()
-          $downloadUrl = "https://github.com/QuantaBricks/deepseek-harness-desktop/releases/download/$env:DESKTOP_TAG/$([uri]::EscapeDataString($nsis.Name))"
-          $latest = @{
-            version = $env:DESKTOP_VERSION
-            notes = 'Automated upstream Harness synchronization.'
-            pub_date = (Get-Date).ToUniversalTime().ToString('o')
-            platforms = @{ 'windows-x86_64' = @{ url = $downloadUrl; signature = $signature } }
-          } | ConvertTo-Json -Depth 5
-          $latestPath = Join-Path $env:RUNNER_TEMP 'latest.json'
-          Set-Content $latestPath $latest
-          gh release create $env:DESKTOP_TAG $nsis.FullName "$($nsis.FullName).sig" $msi.FullName "$($msi.FullName).sig" $latestPath --target $env:SYNC_COMMIT --title "DeepSeek Harness Desktop v$env:DESKTOP_VERSION" --notes 'Automated upstream Harness synchronization.'
+          $assets = @(
+            "tauri-core/src-tauri/target/release/bundle/msi/*-setup.msi",
+            "tauri-core/src-tauri/target/release/bundle/nsis/*-setup.exe",
+            "tauri-core/src-tauri/target/release/bundle/nsis/*-setup.exe.sig",
+            "tauri-core/src-tauri/target/release/bundle/nsis/latest.json"
+          )
+          gh release create $env:TAG --target $env:RELEASE_SHA --title "DeepSeek Harness Desktop $env:VERSION" --generate-notes $assets

@@ -1,73 +1,43 @@
-# DeepSeek Harness
+<p align="center">
+  <img src="tauri-core/assets/quanta-logo.png" alt="QuantaBricks" width="150">
+</p>
 
-English | [中文](README.zh.md)
+# DeepSeek Harness Desktop
 
-## Upstream project: DeepSeek Harness
-
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
-
-It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
-
-## Upstream developer preview
-
-DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
-
----
-
-## QuantaBricks desktop shell
-
-<img src="apps/tauri-shell/assets/quanta-logo.png" alt="QuantaBricks" width="160" />
-
-QuantaBricks adds a separate Tauri desktop shell around Harness Web. Planned work focuses on adaptations for chemical simulation workflows.
-
-A scheduled workflow synchronizes upstream Harness core changes, validates the Web and Windows builds, and publishes a Windows release when both builds succeed. The desktop shell checks GitHub Releases at startup and automatically installs a signed Windows update; install the next release once to enable this updater.
+QuantaBricks provides a Windows desktop shell and future chemistry-simulation extensions around [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). The Harness kernel remains official upstream code and is not modified by this repository.
 
 Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562EPafb).
 
----
+## Layout
 
-## Run
+- `deepseek-harness/` — the official DeepSeek Harness repository, pinned as a Git submodule.
+- `tauri-core/` — the independently buildable Tauri desktop shell. It communicates with Harness only over HTTP.
+- `extension/` — QuantaBricks extensions, including planned chemistry-simulation adaptations.
 
-### Run from `npm`
+## Get started
 
-Install `Node.js`, then run:
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-The command starts the Web UI, served at `http://127.0.0.1:3080` by default. See [Web UI guide](docs/user/guide/index.md).
-
-### Run from source
-
-To run from a repository checkout:
+Clone with the kernel included:
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
+git clone --recurse-submodules https://github.com/QuantaBricks/deepseek-harness-desktop.git
 ```
 
-## Community and support
+For an existing clone:
 
-- Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/Ycq5dCaS4">DeepSeek Harness Discord community</a>.
+```sh
+git submodule update --init --recursive
+```
 
-## Contributing
+Build the Harness Web UI and start the desktop shell:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+```sh
+pnpm --dir deepseek-harness install
+pnpm --dir deepseek-harness run build
+pnpm --dir tauri-core exec tauri dev
+```
 
-## Development
+The shell starts Harness Web on `http://127.0.0.1:3080` during development. The packaged Web UI comes from `deepseek-harness/apps/web/dist`; in installed/external-service mode, start Harness Web independently and then open the desktop application.
 
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
+## Upstream updates and releases
 
-For agents, follow [AGENTS.md](AGENTS.md).
-
-## License
-
-[MIT](LICENSE)
-
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+GitHub Actions checks the official Harness `master` branch every day. When it changes, the workflow advances only the `deepseek-harness` submodule pointer, builds the Web UI and signed Windows installer, then publishes a GitHub Release. No manual merge of the Harness source is required.
