@@ -47,6 +47,7 @@ jobs:
           git fetch upstream master --tags
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $forceRelease = '${{ inputs.force_release }}' -eq 'true'
+          $merged = $false
           git merge-base --is-ancestor upstream/master HEAD
           $upstreamIsCurrent = $LASTEXITCODE -eq 0
           if (-not $forceRelease) {
@@ -55,6 +56,7 @@ jobs:
               exit 0
             }
             git merge --no-edit upstream/master
+            $merged = $true
             if ($LASTEXITCODE -ne 0) {
               foreach ($file in 'README.md', 'README.zh.md', 'README.i18n.yaml') {
                 git checkout --ours -- $file
@@ -70,6 +72,7 @@ jobs:
           $version = "0.1.$env:GITHUB_RUN_NUMBER"
           "publish=true" >> $env:GITHUB_OUTPUT
           "commit=$commit" >> $env:GITHUB_OUTPUT
+          "merged=$merged" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=desktop-v$version" >> $env:GITHUB_OUTPUT
 
@@ -97,7 +100,7 @@ jobs:
           pnpm --dir apps/tauri-shell exec tauri build --config $config
 
       - name: Update main
-        if: steps.sync.outputs.publish == 'true'
+        if: steps.sync.outputs.publish == 'true' && steps.sync.outputs.merged == 'True'
         run: git push origin HEAD:main
 
       - name: Publish Windows release
