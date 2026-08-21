@@ -27,6 +27,18 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyQ0M0Mzc4RUJDOUNDMzYKUldRMnpNbnJlRVBNMHBZaEw5MWJWREdXQVMwT3cvaFVjakZQLzc1aldKMzVTWnFxQTZQeUhGc1kK",
+      "endpoints": [
+        "https://github.com/QuantaBricks/deepseek-harness-desktop/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

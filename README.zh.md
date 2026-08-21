@@ -20,6 +20,8 @@ DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**
 
 QuantaBricks 在 Harness Web 外增加了独立的 Tauri 桌面壳。后续工作将面向化学模拟工作流进行适配。
 
+定时工作流会同步上游 Harness 核心变更，验证 Web 与 Windows 构建，并在两者成功后发布 Windows Release。桌面壳会在启动时检查 GitHub Release 并自动安装经过签名验证的 Windows 更新；请先安装下一版 Release 以启用此更新器。
+
 欢迎加入我们的 Discord 社区：[加入 Discord](https://discord.com/invite/xJ562EPafb)。
 
 ---

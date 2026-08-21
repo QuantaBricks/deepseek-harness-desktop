@@ -1,5 +1,7 @@
 ![Quanta logo](assets/quanta-logo.png)
 
+English | [中文](README.zh.md)
+
 Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562EPafb).
 
 # Tauri shell
@@ -27,3 +29,7 @@ Start Harness Web independently, then launch the installed shell. The shell
 uses `http://127.0.0.1:3080` by default; set `DSH_WEB_URL` before launching it
 to use another address. This keeps the installer independent of the Harness
 runtime and its Node.js dependencies.
+
+## Updates
+
+The Windows shell checks the latest GitHub Release at startup and installs a signed update when one is available.

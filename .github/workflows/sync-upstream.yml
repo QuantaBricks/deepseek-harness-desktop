@@ -1,0 +1,112 @@
+name: Sync upstream Harness and publish Windows desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: Build and publish current main when upstream has no new commits
+        required: true
+        type: boolean
+        default: false
+  schedule:
+    - cron: '41 1 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-harness
+  cancel-in-progress: false
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  sync:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Merge the latest Harness core
+        id: sync
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/deepseek-ai/deepseek-harness.git
+          git fetch upstream master --tags
+          $forceRelease = '${{ inputs.force_release }}' -eq 'true'
+          if (git merge-base --is-ancestor upstream/master HEAD) {
+            if (-not $forceRelease) {
+              'publish=false' >> $env:GITHUB_OUTPUT
+              exit 0
+            }
+          } else {
+            git merge --no-edit upstream/master
+          }
+          $commit = git rev-parse HEAD
+          $version = "0.1.$env:GITHUB_RUN_NUMBER"
+          "publish=true" >> $env:GITHUB_OUTPUT
+          "commit=$commit" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=desktop-v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Install dependencies
+        if: steps.sync.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Harness Web
+        if: steps.sync.outputs.publish == 'true'
+        run: pnpm run build
+
+      - name: Install Rust
+        if: steps.sync.outputs.publish == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build signed Windows installers
+        if: steps.sync.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
+        run: |
+          $config = Join-Path $env:RUNNER_TEMP 'tauri-release.json'
+          @{ version = $env:DESKTOP_VERSION } | ConvertTo-Json -Compress | Set-Content $config
+          pnpm --dir apps/tauri-shell exec tauri build --config $config
+
+      - name: Update main
+        if: steps.sync.outputs.publish == 'true'
+        run: git push origin HEAD:main
+
+      - name: Publish Windows release
+        if: steps.sync.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
+          DESKTOP_TAG: ${{ steps.sync.outputs.tag }}
+          SYNC_COMMIT: ${{ steps.sync.outputs.commit }}
+        run: |
+          $nsis = Get-ChildItem 'apps/tauri-shell/src-tauri/target/release/bundle/nsis/*-setup.exe' | Select-Object -First 1
+          $msi = Get-ChildItem 'apps/tauri-shell/src-tauri/target/release/bundle/msi/*.msi' | Select-Object -First 1
+          $signature = (Get-Content "$($nsis.FullName).sig" -Raw).Trim()
+          $downloadUrl = "https://github.com/QuantaBricks/deepseek-harness-desktop/releases/download/$env:DESKTOP_TAG/$([uri]::EscapeDataString($nsis.Name))"
+          $latest = @{
+            version = $env:DESKTOP_VERSION
+            notes = 'Automated upstream Harness synchronization.'
+            pub_date = (Get-Date).ToUniversalTime().ToString('o')
+            platforms = @{ 'windows-x86_64' = @{ url = $downloadUrl; signature = $signature } }
+          } | ConvertTo-Json -Depth 5
+          $latestPath = Join-Path $env:RUNNER_TEMP 'latest.json'
+          Set-Content $latestPath $latest
+          gh release create $env:DESKTOP_TAG $nsis.FullName "$($nsis.FullName).sig" $msi.FullName "$($msi.FullName).sig" $latestPath --target $env:SYNC_COMMIT --title "DeepSeek Harness Desktop v$env:DESKTOP_VERSION" --notes 'Automated upstream Harness synchronization.'

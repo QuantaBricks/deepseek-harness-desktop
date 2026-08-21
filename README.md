@@ -20,6 +20,8 @@ DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. *
 
 QuantaBricks adds a separate Tauri desktop shell around Harness Web. Planned work focuses on adaptations for chemical simulation workflows.
 
+A scheduled workflow synchronizes upstream Harness core changes, validates the Web and Windows builds, and publishes a Windows release when both builds succeed. The desktop shell checks GitHub Releases at startup and automatically installs a signed Windows update; install the next release once to enable this updater.
+
 Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562EPafb).
 
 ---
