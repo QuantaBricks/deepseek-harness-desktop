@@ -55,7 +55,16 @@ jobs:
               exit 0
             }
             git merge --no-edit upstream/master
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($LASTEXITCODE -ne 0) {
+              foreach ($file in 'README.md', 'README.zh.md', 'README.i18n.yaml') {
+                git checkout --ours -- $file
+                git add -- $file
+              }
+              $unresolved = git diff --name-only --diff-filter=U
+              if ($unresolved) { exit 1 }
+              git commit --no-edit
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
           }
           $commit = git rev-parse HEAD
           $version = "0.1.$env:GITHUB_RUN_NUMBER"

@@ -12,7 +12,7 @@ QuantaBricks 桌面发行版依赖 DeepSeek Harness Web，因此手动同步上�
 
 `.github/workflows/sync-upstream.yml` 每天及手动触发时检查 `deepseek-ai/deepseek-harness` 的 `master`。上游有新提交时，工作流在其 checkout 中合并这些提交、安装依赖、构建 Harness Web、构建经过签名的 Windows Tauri 安装包、将合并结果推送到 `main`，并发布带唯一版本号的 GitHub Release。手动触发也可以发布当前 `main`，用于启用更新器。
 
-工作流只会在两个构建均成功后推送。合并冲突、依赖失败或安装包构建失败都会保持 `main` 与最新 Release 不变。Tauri 更新器会在应用启动时检查最新 Release，并且只接受由 GitHub Actions 中私钥签名的文件。
+工作流会在上游品牌变更与 QuantaBricks 根 README 文件冲突时保留 QuantaBricks 文件；其余合并冲突仍会停止同步。工作流只会在两个构建均成功后推送。其余合并冲突、依赖失败或安装包构建失败都会保持 `main` 与最新 Release 不变。Tauri 更新器会在应用启动时检查最新 Release，并且只接受由 GitHub Actions 中私钥签名的文件。
 
 ## Alternatives considered
 

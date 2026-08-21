@@ -12,7 +12,7 @@ The QuantaBricks desktop distribution depends on DeepSeek Harness Web, so manual
 
 `.github/workflows/sync-upstream.yml` checks `deepseek-ai/deepseek-harness` `master` every day and on manual dispatch. When upstream has new commits, it merges them in the workflow checkout, installs dependencies, builds Harness Web, builds signed Windows Tauri installers, pushes the merge to `main`, and publishes a uniquely versioned GitHub Release. Manual dispatch can also publish the current `main` to bootstrap the updater.
 
-The workflow pushes only after both builds succeed. A merge conflict, dependency failure, or installer failure leaves `main` and the latest release unchanged. The Tauri updater checks the latest release at application startup and accepts only artifacts signed by the private key stored in GitHub Actions.
+The workflow preserves the QuantaBricks root README files when they conflict with upstream branding changes, then stops on any remaining merge conflict. It pushes only after both builds succeed. A remaining merge conflict, dependency failure, or installer failure leaves `main` and the latest release unchanged. The Tauri updater checks the latest release at application startup and accepts only artifacts signed by the private key stored in GitHub Actions.
 
 ## Alternatives considered
 
