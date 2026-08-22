@@ -111,7 +111,11 @@ jobs:
             'C:\dsh\node.exe' = 'node.exe'
             'C:\dsh\harness' = 'harness'
           }
-          $config | ConvertTo-Json -Depth 100 | Set-Content tauri-core/src-tauri/tauri.release.conf.json -Encoding utf8
+          $releaseConfig = $config | ConvertTo-Json -Depth 100
+          # tauri-build reads the base config during Cargo's build script, so it
+          # must use the same short resource paths as the release overlay.
+          $releaseConfig | Set-Content tauri-core/src-tauri/tauri.conf.json -Encoding utf8
+          $releaseConfig | Set-Content tauri-core/src-tauri/tauri.release.conf.json -Encoding utf8
           pnpm --dir tauri-core exec tauri build --config src-tauri/tauri.release.conf.json
 
       - name: Generate Tauri updater manifest
