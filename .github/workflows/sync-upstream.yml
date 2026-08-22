@@ -110,11 +110,26 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          $config = Get-Content tauri-core/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          # NSIS still expands junctions when packaging.  Stage the shell under
+          # C:\w so every expanded Harness dependency stays below MAX_PATH.
+          $stage = 'C:\w'
+          if (Test-Path $stage) {
+            Remove-Item $stage -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path "$stage\t" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$stage\deepseek-harness\apps\web\dist" -Force | Out-Null
+          robocopy tauri-core "$stage\t" /E /XD target r
+          if ($LASTEXITCODE -gt 7) { throw "Failed to stage Tauri shell (robocopy exit $LASTEXITCODE)." }
+          robocopy deepseek-harness/apps/web/dist "$stage\deepseek-harness\apps\web\dist" /E
+          if ($LASTEXITCODE -gt 7) { throw "Failed to stage Harness web UI (robocopy exit $LASTEXITCODE)." }
+          New-Item -ItemType Junction -Path "$stage\t\src-tauri\r" -Target 'C:\dsh' | Out-Null
+
+          $config = Get-Content "$stage\t\src-tauri\tauri.conf.json" -Raw | ConvertFrom-Json
           $config.version = $env:DESKTOP_VERSION
           $releaseConfig = $config | ConvertTo-Json -Depth 100
-          $releaseConfig | Set-Content tauri-core/src-tauri/tauri.release.conf.json -Encoding utf8
-          pnpm --dir tauri-core exec tauri build --config src-tauri/tauri.release.conf.json
+          $releaseConfig | Set-Content "$stage\t\src-tauri\tauri.release.conf.json" -Encoding utf8
+          pnpm --dir "$stage\t" install --frozen-lockfile
+          pnpm --dir "$stage\t" exec tauri build --config src-tauri/tauri.release.conf.json
 
       - name: Generate Tauri updater manifest
         if: steps.sync.outputs.publish == 'true'
@@ -123,7 +138,7 @@ jobs:
           TAG: ${{ steps.sync.outputs.tag }}
           VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          $bundle = Resolve-Path tauri-core/src-tauri/target/release/bundle/nsis
+          $bundle = Resolve-Path C:\w\t\src-tauri\target\release\bundle\nsis
           $installer = Get-ChildItem $bundle -Filter '*-setup.exe' | Select-Object -First 1
           $signature = Get-Content "$($installer.FullName).sig" -Raw
           $manifest = [ordered]@{
@@ -163,7 +178,7 @@ jobs:
           VERSION: ${{ steps.sync.outputs.version }}
           RELEASE_SHA: ${{ steps.commit.outputs.sha || steps.current.outputs.sha }}
         run: |
-          $assets = Get-ChildItem tauri-core/src-tauri/target/release/bundle -Recurse -File |
+          $assets = Get-ChildItem C:\w\t\src-tauri\target\release\bundle -Recurse -File |
             Where-Object { $_.Extension -in '.msi', '.exe', '.sig' -or $_.Name -eq 'latest.json' } |
             ForEach-Object { $_.FullName }
           if ($assets.Count -eq 0) {
