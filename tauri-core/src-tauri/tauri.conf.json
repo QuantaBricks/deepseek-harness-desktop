@@ -29,10 +29,15 @@
     "targets": "nsis",
     "icon": ["icons/icon.ico"],
     "resources": {
-      "r/node.exe": "node.exe",
-      "r/harness": "harness"
+      "r/node.exe": "n.exe",
+      "r/harness": "h"
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installerHooks": "nsis-hooks.nsh"
+      }
+    }
   },
   "plugins": {
     "updater": {

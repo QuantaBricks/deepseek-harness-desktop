@@ -46,8 +46,8 @@ fn start_embedded_harness(
     }
 
     let resource_dir = app.path().resource_dir()?;
-    let harness_dir = resource_dir.join("harness");
-    let node = resource_dir.join("node.exe");
+    let harness_dir = resource_dir.join("h");
+    let node = resource_dir.join("n.exe");
     let cli = harness_dir
         .join("node_modules")
         .join("@deepseek-ai")
