@@ -29,8 +29,8 @@
     "targets": "nsis",
     "icon": ["icons/icon.ico"],
     "resources": {
-      "../../runtime/node.exe": "node.exe",
-      "../../runtime/harness": "harness"
+      "r/node.exe": "node.exe",
+      "r/harness": "harness"
     },
     "createUpdaterArtifacts": true
   },
