@@ -48,12 +48,9 @@ fn start_embedded_harness(
     let resource_dir = app.path().resource_dir()?;
     let harness_dir = resource_dir.join("h");
     let node = resource_dir.join("n.exe");
-    let cli = harness_dir
-        .join("node_modules")
-        .join("@deepseek-ai")
-        .join("dsh")
-        .join("lib")
-        .join("bin.js");
+    // `pnpm deploy --filter @deepseek-ai/dsh` makes the CLI package itself
+    // the deployment root, so its entry point is `h/lib/bin.js`.
+    let cli = harness_dir.join("lib").join("bin.js");
     if !node.is_file() || !cli.is_file() {
         return Err(format!(
             "embedded Harness runtime is incomplete: node={} cli={}",
