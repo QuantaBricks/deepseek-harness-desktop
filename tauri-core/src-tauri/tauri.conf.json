@@ -28,6 +28,10 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/icon.ico"],
+    "resources": {
+      "../runtime/node.exe": "node.exe",
+      "../runtime/harness": "harness"
+    },
     "createUpdaterArtifacts": true
   },
   "plugins": {

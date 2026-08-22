@@ -5,6 +5,8 @@ deepseek-harness/dist/
 # Tauri build products.
 tauri-core/node_modules/
 tauri-core/src-tauri/target/
+tauri-core/runtime/
+tauri-core/runtime-test/
 
 # Local TypeScript residue left by the former monorepo layout.
 *.tsbuildinfo

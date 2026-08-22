@@ -36,7 +36,7 @@ pnpm --dir deepseek-harness run build
 pnpm --dir tauri-core exec tauri dev
 ```
 
-The shell starts Harness Web on `http://127.0.0.1:3080` during development. The packaged Web UI comes from `deepseek-harness/apps/web/dist`; in installed/external-service mode, start Harness Web independently and then open the desktop application.
+The shell starts Harness Web on `http://127.0.0.1:3080` during development. Windows installers include the official Harness CLI and a private Node runtime, so the desktop shell starts `dsh web` itself. Set `DSH_WEB_URL` only when intentionally connecting to an independently managed Harness Web service.
 
 ## Upstream updates and releases
 

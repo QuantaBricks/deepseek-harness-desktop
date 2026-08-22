@@ -79,6 +79,19 @@ jobs:
         if: steps.sync.outputs.publish == 'true'
         run: pnpm --dir deepseek-harness run build
 
+      - name: Prepare embedded Windows Harness runtime
+        if: steps.sync.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          if (Test-Path tauri-core/runtime) {
+            Remove-Item tauri-core/runtime -Recurse -Force
+          }
+          pnpm --dir deepseek-harness deploy --filter @deepseek-ai/dsh --prod --legacy ../tauri-core/runtime/harness
+          $nodeZip = Join-Path $env:RUNNER_TEMP 'node-v22.23.2-win-x64.zip'
+          Invoke-WebRequest 'https://nodejs.org/dist/v22.23.2/node-v22.23.2-win-x64.zip' -OutFile $nodeZip
+          Expand-Archive $nodeZip -DestinationPath $env:RUNNER_TEMP -Force
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'node-v22.23.2-win-x64/node.exe') tauri-core/runtime/node.exe
+
       - name: Install Rust
         if: steps.sync.outputs.publish == 'true'
         uses: dtolnay/rust-toolchain@stable
@@ -94,6 +107,29 @@ jobs:
           $config.version = $env:DESKTOP_VERSION
           $config | ConvertTo-Json -Depth 100 | Set-Content tauri-core/src-tauri/tauri.release.conf.json -Encoding utf8
           pnpm --dir tauri-core exec tauri build --config src-tauri/tauri.release.conf.json
+
+      - name: Generate Tauri updater manifest
+        if: steps.sync.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          TAG: ${{ steps.sync.outputs.tag }}
+          VERSION: ${{ steps.sync.outputs.version }}
+        run: |
+          $bundle = Resolve-Path tauri-core/src-tauri/target/release/bundle/nsis
+          $installer = Get-ChildItem $bundle -Filter '*-setup.exe' | Select-Object -First 1
+          $signature = Get-Content "$($installer.FullName).sig" -Raw
+          $manifest = [ordered]@{
+            version = $env:VERSION
+            notes = "DeepSeek Harness Desktop $env:VERSION"
+            pub_date = [DateTime]::UtcNow.ToString('o')
+            platforms = [ordered]@{
+              'windows-x86_64' = [ordered]@{
+                signature = $signature.Trim()
+                url = "https://github.com/QuantaBricks/deepseek-harness-desktop/releases/download/$env:TAG/$($installer.Name)"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $bundle 'latest.json') -Encoding utf8
 
       - name: Commit updated Harness pointer
         if: steps.sync.outputs.publish == 'true' && steps.sync.outputs.source_updated == 'True'
