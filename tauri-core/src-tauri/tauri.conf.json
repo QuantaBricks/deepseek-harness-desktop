@@ -36,7 +36,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyQ0M0Mzc4RUJDOUNDMzYKUldRMnpNbnJlRVBNMHBZaEw5MWJWREdXQVMwT3cvaFVjakZQLzc1aldKMzVTWnFxQTZQeUhGc1kK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJGREJBNThBNUE3NUE3NUEKUldSYXAzVmFpcVhidnp3Si83THcrb3pOcXljUFdWR0pzOTU2cXpPQTIxSjMxWWNMZE9mbDI2WjUK",
       "endpoints": [
         "https://github.com/QuantaBricks/deepseek-harness-desktop/releases/latest/download/latest.json"
       ],
