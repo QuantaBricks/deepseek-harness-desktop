@@ -83,16 +83,16 @@ jobs:
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
         run: |
-          $runtime = 'C:\dsh'
+          $runtime = 'runtime'
           if (Test-Path $runtime) {
             Remove-Item $runtime -Recurse -Force
           }
           New-Item -ItemType Directory -Path $runtime | Out-Null
-          pnpm --dir deepseek-harness deploy --filter @deepseek-ai/dsh --prod --legacy "$runtime/harness"
+          pnpm --dir deepseek-harness deploy --filter @deepseek-ai/dsh --prod --legacy ../runtime/harness
           $nodeZip = Join-Path $env:RUNNER_TEMP 'node-v22.23.2-win-x64.zip'
           Invoke-WebRequest 'https://nodejs.org/dist/v22.23.2/node-v22.23.2-win-x64.zip' -OutFile $nodeZip
           Expand-Archive $nodeZip -DestinationPath $env:RUNNER_TEMP -Force
-          Copy-Item (Join-Path $env:RUNNER_TEMP 'node-v22.23.2-win-x64/node.exe') "$runtime/node.exe"
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'node-v22.23.2-win-x64/node.exe') runtime/node.exe
 
       - name: Install Rust
         if: steps.sync.outputs.publish == 'true'
@@ -107,14 +107,7 @@ jobs:
         run: |
           $config = Get-Content tauri-core/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
           $config.version = $env:DESKTOP_VERSION
-          $config.bundle.resources = [ordered]@{
-            'C:\dsh\node.exe' = 'node.exe'
-            'C:\dsh\harness' = 'harness'
-          }
           $releaseConfig = $config | ConvertTo-Json -Depth 100
-          # tauri-build reads the base config during Cargo's build script, so it
-          # must use the same short resource paths as the release overlay.
-          $releaseConfig | Set-Content tauri-core/src-tauri/tauri.conf.json -Encoding utf8
           $releaseConfig | Set-Content tauri-core/src-tauri/tauri.release.conf.json -Encoding utf8
           pnpm --dir tauri-core exec tauri build --config src-tauri/tauri.release.conf.json
 

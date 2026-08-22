@@ -7,6 +7,7 @@ tauri-core/node_modules/
 tauri-core/src-tauri/target/
 tauri-core/runtime/
 tauri-core/runtime-test/
+runtime/
 
 # Local TypeScript residue left by the former monorepo layout.
 *.tsbuildinfo
