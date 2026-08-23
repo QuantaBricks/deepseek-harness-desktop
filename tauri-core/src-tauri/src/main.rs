@@ -32,7 +32,7 @@ fn update_core(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     quote(manifest), quote(core.display().to_string()), quote(stage.display().to_string()), quote(old.display().to_string())
   );
   let result = Command::new("powershell")
-    .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
+    .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", &script])
     .output()?;
   if result.status.success() {
     Ok(())
