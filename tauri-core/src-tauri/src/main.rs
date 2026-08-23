@@ -20,30 +20,6 @@ fn core(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
   Ok(app.path().app_local_data_dir()?.join("harness-core"))
 }
 
-fn local_version(core: &PathBuf) -> Option<String> {
-  let text = fs::read_to_string(core.join("core-manifest.json")).ok()?;
-  text.split("\"version\"").nth(1)?.split(':').nth(1)?.split('"').nth(1).map(str::to_owned)
-}
-
-fn remote_version() -> Option<String> {
-  let manifest = env::var("DSH_CORE_MANIFEST_URL").unwrap_or_else(|_| MANIFEST.into());
-  let script = format!("$m=Invoke-RestMethod '{}';[Console]::Write($m.version)", manifest.replace('\'', "''"));
-  let output = Command::new("powershell")
-    .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
-    .output()
-    .ok()?;
-  output.status.success().then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-}
-
-fn has_update(app: &AppHandle) -> bool {
-  let Ok(core) = core(app) else { return false };
-  match (local_version(&core), remote_version()) {
-    (Some(local), Some(remote)) => local != remote,
-    (None, Some(_)) => true,
-    _ => false,
-  }
-}
-
 fn update_core(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
   let core = core(app)?;
   let parent = core.parent().ok_or("missing core parent")?;
