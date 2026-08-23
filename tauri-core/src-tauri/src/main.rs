@@ -106,7 +106,12 @@ fn main() {
         return Ok(());
       }
       let mut child = None;
-      if !cfg!(debug_assertions) && !has_update(&handle) {
+      let core_ready = core(&handle)
+        .map(|path| path.join("node.exe").is_file() && path.join("harness").join("lib").join("bin.js").is_file())
+        .unwrap_or(false);
+      // Never block an installed core on a remote manifest request. The
+      // existing core starts immediately; updates are downloaded separately.
+      if !cfg!(debug_assertions) && core_ready {
         if let Ok(process) = launch_core(&handle) { child = Some(process); }
       }
       app.manage(Core(Mutex::new(child)));
