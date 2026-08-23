@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
-  env, fs,
+  env,
   net::TcpStream,
   path::PathBuf,
   process::{Child, Command, Stdio},
