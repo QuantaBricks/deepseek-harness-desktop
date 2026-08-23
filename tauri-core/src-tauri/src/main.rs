@@ -31,10 +31,14 @@ fn update_core(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     "$ErrorActionPreference='Stop';$u='{}';$c='{}';$s='{}';$o='{}';$m=Invoke-RestMethod $u;$l=Join-Path $c 'core-manifest.json';if((Test-Path $l)-and((Get-Content $l -Raw|ConvertFrom-Json).version -eq $m.version)){{exit 0}};Remove-Item -LiteralPath $s -Recurse -Force -ErrorAction SilentlyContinue;New-Item -ItemType Directory -Path $s|Out-Null;$z=Join-Path $s 'core.zip';Invoke-WebRequest $m.url -OutFile $z;if((Get-FileHash $z -Algorithm SHA256).Hash.ToLower() -ne $m.sha256){{throw 'checksum mismatch'}};Add-Type -AssemblyName System.IO.Compression.FileSystem;[IO.Compression.ZipFile]::ExtractToDirectory($z,$s,$true);Remove-Item -LiteralPath $z -Force;$links=Get-Content -LiteralPath (Join-Path $s 'links.json') -Raw|ConvertFrom-Json;foreach($x in $links){{$p=Join-Path $s $x.path;$t=Join-Path (Split-Path $p -Parent) $x.target;New-Item -ItemType Junction -Path $p -Target $t|Out-Null}};if(!(Test-Path -LiteralPath (Join-Path $s 'node.exe')) -or !(Test-Path -LiteralPath (Join-Path $s 'harness\\lib\\bin.js'))){{throw 'incomplete core'}};$m|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $s 'core-manifest.json') -Encoding utf8;Remove-Item -LiteralPath $o -Recurse -Force -ErrorAction SilentlyContinue;if(Test-Path -LiteralPath $c){{Move-Item -LiteralPath $c -Destination $o}};Move-Item -LiteralPath $s -Destination $c",
     quote(manifest), quote(core.display().to_string()), quote(stage.display().to_string()), quote(old.display().to_string())
   );
-  if Command::new("powershell").args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script]).status()?.success() {
+  let result = Command::new("powershell")
+    .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
+    .output()?;
+  if result.status.success() {
     Ok(())
   } else {
-    Err("core update failed".into())
+    let detail = String::from_utf8_lossy(&result.stderr).trim().to_owned();
+    Err(if detail.is_empty() { "core update failed".into() } else { detail.into() })
   }
 }
 
@@ -65,6 +69,14 @@ fn navigate_when_ready(app: &AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn install_or_update_core(app: AppHandle, state: State<'_, Core>) -> Result<(), String> {
+  {
+    let mut child = state.0.lock().map_err(|_| "core process lock failed")?;
+    if let Some(process) = child.as_mut() {
+      let _ = process.kill();
+      let _ = process.wait();
+      *child = None;
+    }
+  }
   update_core(&app).map_err(|error| error.to_string())?;
   let mut child = state.0.lock().map_err(|_| "core process lock failed")?;
   if child.is_none() { *child = Some(launch_core(&app).map_err(|error| error.to_string())?); }
