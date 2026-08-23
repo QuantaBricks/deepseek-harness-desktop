@@ -5,11 +5,11 @@
   "version": "0.1.0",
   "identifier": "ai.deepseek.dsh.shell",
   "build": {
-    "beforeDevCommand": "pnpm --dir ../deepseek-harness dsh web --host 127.0.0.1 --port 3080",
     "devUrl": "http://127.0.0.1:3080",
-    "frontendDist": "../../deepseek-harness/apps/web/dist"
+    "frontendDist": "../loader"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
@@ -29,10 +29,6 @@
     "active": true,
     "targets": "nsis",
     "icon": ["icons/icon.ico"],
-    "resources": {
-      "r/node.exe": "n.exe",
-      "r/harness": "h"
-    },
     "createUpdaterArtifacts": true
   },
   "plugins": {
