@@ -50,6 +50,35 @@ try {
       Copy-Item -LiteralPath $link.target -Destination $destination -Force
     }
   }
+  # Restore root pnpm package links that deploy materialized as flat
+  # directories. Workspace packages need their nested node_modules graph;
+  # without these links Node resolves the package itself but not its deps.
+  $runtimeModules=Join-Path $flat 'harness\node_modules'
+  $rootPackages=@(Get-ChildItem $runtimeModules -Directory -Force -ErrorAction SilentlyContinue | Where-Object Name -notin @('.pnpm','.bin'))
+  foreach($scope in @($rootPackages | Where-Object Name -like '@*')) {
+    $rootPackages += Get-ChildItem $scope.FullName -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
+      [pscustomobject]@{ FullName=$_.FullName; Name=($scope.Name+'/'+$_.Name) }
+    }
+  }
+  foreach($packageDir in $rootPackages) {
+    $packageName=[string]$packageDir.Name
+    if($packageName -in @('@deepseek-ai','@opentelemetry')) { continue }
+    $packagePath=$packageDir.FullName
+    $item=Get-Item -LiteralPath $packagePath -Force
+    if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+    $encoded=$packageName.Replace('/','+')
+    $store=Get-ChildItem (Join-Path $runtimeModules '.pnpm') -Directory -Filter ($encoded+'@*') -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName ('node_modules\'+$packageName) } |
+      Where-Object { Test-Path -LiteralPath (Join-Path $_ 'package.json') } |
+      Select-Object -First 1
+    if(!$store) { continue }
+    Remove-Item -LiteralPath $packagePath -Recurse -Force
+    & cmd.exe /c mklink /J "$packagePath" "$store" | Out-Null
+    $links += [ordered]@{
+      path=(Get-RelativePath $root $packagePath).Replace('\\','/')
+      target=Get-RelativePath (Split-Path -Parent $packagePath) $store
+    }
+  }
   $json=if($links.Count){$links|ConvertTo-Json -Depth 4}else{'[]'}
   Set-Content -LiteralPath (Join-Path $flat 'links.json') -Value $json -Encoding utf8
   if(Test-Path -LiteralPath $Archive) { [IO.File]::Delete($Archive) }
