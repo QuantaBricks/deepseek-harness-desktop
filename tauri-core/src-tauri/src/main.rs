@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
-  env,
+  env, fs,
+  fs::File,
+  io::{Read, Write},
   net::TcpStream,
   path::PathBuf,
   process::{Child, Command, Stdio},
@@ -9,12 +11,21 @@ use std::{
   thread,
   time::Duration,
 };
+use sha2::{Digest, Sha256};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
 const URL: &str = "http://127.0.0.1:3080";
 const MANIFEST: &str = "https://github.com/QuantaBricks/deepseek-harness-desktop/releases/latest/download/core-manifest.json";
 
 struct Core(Mutex<Option<Child>>);
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Manifest {
+  version: String,
+  url: String,
+  sha256: String,
+}
 
 fn core(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
   Ok(app.path().app_local_data_dir()?.join("harness-core"))
@@ -26,21 +37,53 @@ fn update_core(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
   let stage = parent.join("harness-core.next");
   let old = parent.join("harness-core.previous");
   let manifest = env::var("DSH_CORE_MANIFEST_URL").unwrap_or_else(|_| MANIFEST.into());
-  let quote = |value: String| value.replace('\'', "''");
-  let script = format!(
-    "$ErrorActionPreference='Stop';$u='{}';$c='{}';$s='{}';$o='{}';$m=Invoke-RestMethod $u;$l=Join-Path $c 'core-manifest.json';if((Test-Path $l)-and((Get-Content $l -Raw|ConvertFrom-Json).version -eq $m.version)){{exit 0}};Remove-Item -LiteralPath $s -Recurse -Force -ErrorAction SilentlyContinue;New-Item -ItemType Directory -Path $s|Out-Null;$z=Join-Path $s 'core.zip';$d=Join-Path $s 'core.zip.download';Remove-Item -LiteralPath $d -Force -ErrorAction SilentlyContinue;Invoke-WebRequest $m.url -OutFile $d;if((Get-FileHash $d -Algorithm SHA256).Hash.ToLower() -ne $m.sha256){{Remove-Item -LiteralPath $d -Force -ErrorAction SilentlyContinue;throw 'checksum mismatch'}};Move-Item -LiteralPath $d -Destination $z;Add-Type -AssemblyName System.IO.Compression.FileSystem;[IO.Compression.ZipFile]::ExtractToDirectory($z,$s);Remove-Item -LiteralPath $z -Force;$links=Get-Content -LiteralPath (Join-Path $s 'links.json') -Raw|ConvertFrom-Json;foreach($x in $links){{$p=Join-Path $s $x.path;$t=Join-Path (Split-Path $p -Parent) $x.target;New-Item -ItemType Junction -Path $p -Target $t|Out-Null}};if(!(Test-Path -LiteralPath (Join-Path $s 'node.exe')) -or !(Test-Path -LiteralPath (Join-Path $s 'harness\\lib\\bin.js'))){{throw 'incomplete core'}};$m|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $s 'core-manifest.json') -Encoding utf8;Remove-Item -LiteralPath $o -Recurse -Force -ErrorAction SilentlyContinue;if(Test-Path -LiteralPath $c){{Move-Item -LiteralPath $c -Destination $o}};Move-Item -LiteralPath $s -Destination $c",
-    quote(manifest), quote(core.display().to_string()), quote(stage.display().to_string()), quote(old.display().to_string())
-  );
-  let result = Command::new("powershell")
-    .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", &script])
-    .output()?;
-  if result.status.success() {
-    Ok(())
-  } else {
-    let detail = String::from_utf8_lossy(&result.stderr).trim().to_owned();
-    Err(if detail.is_empty() { "core update failed".into() } else { detail.into() })
+  let remote: Manifest = reqwest::blocking::get(manifest)?.error_for_status()?.json()?;
+  if core.join("core-manifest.json").is_file() {
+    let local: Manifest = serde_json::from_str(&fs::read_to_string(core.join("core-manifest.json"))?)?;
+    if local.version == remote.version { return Ok(()) }
   }
+  if stage.exists() { fs::remove_dir_all(&stage)?; }
+  fs::create_dir_all(&stage)?;
+  let archive = stage.join("core.zip.download");
+  let mut response = reqwest::blocking::get(&remote.url)?.error_for_status()?;
+  let mut output = File::create(&archive)?;
+  response.copy_to(&mut output)?;
+  output.flush()?;
+  let mut file = File::open(&archive)?;
+  let mut hasher = Sha256::new();
+  let mut buffer = [0u8; 1024 * 1024];
+  loop { let n = file.read(&mut buffer)?; if n == 0 { break } hasher.update(&buffer[..n]); }
+  let actual = format!("{:x}", hasher.finalize());
+  if actual != remote.sha256.to_lowercase() { return Err("core checksum mismatch".into()) }
+  let mut zip = zip::ZipArchive::new(File::open(&archive)?)?;
+  for index in 0..zip.len() {
+    let mut entry = zip.by_index(index)?;
+    let Some(relative) = entry.enclosed_name().map(|p| p.to_owned()) else { continue };
+    let destination = stage.join(relative);
+    if entry.is_dir() { fs::create_dir_all(&destination)?; continue }
+    if let Some(parent) = destination.parent() { fs::create_dir_all(parent)?; }
+    let mut target = File::create(destination)?;
+    std::io::copy(&mut entry, &mut target)?;
+  }
+  fs::remove_file(&archive)?;
+  let links: Vec<Link> = serde_json::from_str(&fs::read_to_string(stage.join("links.json"))?)?;
+  for link in links {
+    let path = stage.join(&link.path);
+    let target = path.parent().ok_or("invalid link parent")?.join(&link.target);
+    if path.exists() { continue }
+    if let Some(parent) = path.parent() { fs::create_dir_all(parent)?; }
+    junction::create(&target, &path)?;
+  }
+  fs::write(stage.join("core-manifest.json"), serde_json::to_vec_pretty(&remote)?)?;
+  if !stage.join("node.exe").is_file() || !stage.join("harness/lib/bin.js").is_file() { return Err("incomplete core".into()) }
+  if old.exists() { fs::remove_dir_all(&old)?; }
+  if core.exists() { fs::rename(&core, &old)?; }
+  fs::rename(stage, core)?;
+  Ok(())
 }
+
+#[derive(Debug, Deserialize)]
+struct Link { path: String, target: String }
 
 fn launch_core(app: &AppHandle) -> Result<Child, Box<dyn std::error::Error>> {
   let core = core(app)?;

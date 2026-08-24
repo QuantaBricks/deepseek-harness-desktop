@@ -8,7 +8,7 @@ $externalLinks=@()
 function Get-RelativePath($from,$to) {
   $fromUri=[Uri]::new(($from.TrimEnd([char]92)+[char]92))
   $toUri=[Uri]::new($to)
-  [Uri]::UnescapeDataString($fromUri.MakeRelativeUri($toUri).ToString()).Replace('/','\\')
+  [Uri]::UnescapeDataString($fromUri.MakeRelativeUri($toUri).ToString()).Replace('/','\')
 }
 Get-ChildItem -LiteralPath $root -Recurse -Force -Attributes ReparsePoint -ErrorAction SilentlyContinue |
   Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 } |
