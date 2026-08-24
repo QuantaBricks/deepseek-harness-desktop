@@ -70,7 +70,11 @@ fn update_core(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
   for link in links {
     let path = stage.join(&link.path);
     let target = path.parent().ok_or("invalid link parent")?.join(&link.target);
-    if path.exists() { continue }
+    if let Ok(metadata) = fs::symlink_metadata(&path) {
+      if metadata.file_type().is_symlink() { continue }
+      if metadata.is_dir() { fs::remove_dir_all(&path)?; }
+      else { fs::remove_file(&path)?; }
+    }
     if let Some(parent) = path.parent() { fs::create_dir_all(parent)?; }
     junction::create(&target, &path)?;
   }
