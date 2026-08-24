@@ -71,6 +71,12 @@ try {
       ForEach-Object { Join-Path $_.FullName ('node_modules\'+$packageName) } |
       Where-Object { Test-Path -LiteralPath (Join-Path $_ 'package.json') } |
       Select-Object -First 1
+    if(!$store) {
+      $store=Get-ChildItem (Join-Path $runtimeModules '.pnpm') -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName ('node_modules\'+$packageName) } |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_ 'package.json') } |
+        Select-Object -First 1
+    }
     if(!$store) { continue }
     Remove-Item -LiteralPath $packagePath -Recurse -Force
     & cmd.exe /c mklink /J "$packagePath" "$store" | Out-Null
