@@ -75,7 +75,7 @@ try {
     Remove-Item -LiteralPath $packagePath -Recurse -Force
     & cmd.exe /c mklink /J "$packagePath" "$store" | Out-Null
     $links += [ordered]@{
-      path=(Get-RelativePath $root $packagePath).Replace('\\','/')
+      path=(Get-RelativePath $flat $packagePath).Replace('\\','/')
       target=Get-RelativePath (Split-Path -Parent $packagePath) $store
     }
   }
