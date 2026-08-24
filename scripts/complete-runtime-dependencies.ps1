@@ -14,17 +14,18 @@ $tempRoot=if($env:RUNNER_TEMP){$env:RUNNER_TEMP}else{[IO.Path]::GetTempPath()}
 
 function Copy-Dependency([string]$name) {
   if($seen[$name] -or $name.StartsWith('@deepseek-ai/')) { return }
-  $seen[$name]=$true
   $from=Join-Path $sourceModules $name
   $manifest=Join-Path $from 'package.json'
-  if(!(Test-Path -LiteralPath $manifest) -and $name -eq 'zod') {
-    $from=Get-ChildItem (Join-Path $sourceModules '.pnpm') -Directory -Filter 'zod@*' -ErrorAction SilentlyContinue |
-      ForEach-Object { Join-Path $_.FullName 'node_modules\zod' } |
+  if(!(Test-Path -LiteralPath $manifest)) {
+    $encoded=$name.Replace('/','+')
+    $from=Get-ChildItem (Join-Path $sourceModules '.pnpm') -Directory -Filter ($encoded+'@*') -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName ('node_modules\'+$name) } |
       Where-Object { Test-Path -LiteralPath (Join-Path $_ 'package.json') } |
       Select-Object -First 1
     if($from) { $manifest=Join-Path $from 'package.json' }
   }
   if(!$from -or !(Test-Path -LiteralPath $manifest)) { return }
+  $seen[$name]=$true
   $to=Join-Path $runtimeModules $name
   if(Test-Path -LiteralPath $to) {
     $existing=Get-Item -LiteralPath $to -Force
