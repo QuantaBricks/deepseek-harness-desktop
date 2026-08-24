@@ -32,6 +32,7 @@ function Copy-Dependency([string]$name) {
 
 Copy-Dependency '@koromix/koffi-win32-x64'
 Copy-Dependency '@img/sharp-win32-x64'
+Copy-Dependency 'zod'
 
 for($attempt=1;$attempt-le 10;$attempt++) {
   $stdout=Join-Path $tempRoot "dsh-runtime-$attempt.out.log"
