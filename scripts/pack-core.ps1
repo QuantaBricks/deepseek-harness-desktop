@@ -4,6 +4,7 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $root=(Resolve-Path $Core).Path
 $links=@()
+$externalLinks=@()
 function Get-RelativePath($from,$to) {
   $fromUri=[Uri]::new(($from.TrimEnd([char]92)+[char]92))
   $toUri=[Uri]::new($to)
@@ -25,6 +26,11 @@ Get-ChildItem -LiteralPath $root -Recurse -Force -Attributes ReparsePoint -Error
             path=(Get-RelativePath $root $_.FullName).Replace('\\','/')
             target=Get-RelativePath (Split-Path -Parent $_.FullName) $target
           }
+        } else {
+          $externalLinks += [ordered]@{
+            path=(Get-RelativePath $root $_.FullName).Replace('\\','/')
+            target=$target
+          }
         }
       }
     }
@@ -34,6 +40,16 @@ New-Item -ItemType Directory -Path $flat | Out-Null
 try {
   robocopy $root $flat /E /XJ /XJD /XJF /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
   if($LASTEXITCODE -gt 7) { throw "Failed to stage flat core (robocopy exit $LASTEXITCODE)." }
+  foreach($link in $externalLinks) {
+    $destination=Join-Path $flat $link.path
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    if((Get-Item -LiteralPath $link.target -Force).PSIsContainer) {
+      robocopy $link.target $destination /E /XJ /XJD /XJF /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+      if($LASTEXITCODE -gt 7) { throw "Failed to materialize external runtime link $($link.path)." }
+    } else {
+      Copy-Item -LiteralPath $link.target -Destination $destination -Force
+    }
+  }
   $json=if($links.Count){$links|ConvertTo-Json -Depth 4}else{'[]'}
   Set-Content -LiteralPath (Join-Path $flat 'links.json') -Value $json -Encoding utf8
   if(Test-Path -LiteralPath $Archive) { [IO.File]::Delete($Archive) }
