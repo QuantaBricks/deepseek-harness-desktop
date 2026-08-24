@@ -26,6 +26,12 @@ function Copy-Dependency([string]$name) {
   }
   if(!$from -or !(Test-Path -LiteralPath $manifest)) { return }
   $to=Join-Path $runtimeModules $name
+  if(Test-Path -LiteralPath $to) {
+    $existing=Get-Item -LiteralPath $to -Force
+    if(($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      & cmd.exe /c rmdir "$to" | Out-Null
+    }
+  }
   New-Item -ItemType Directory -Path $to -Force | Out-Null
   # pnpm exposes packages through junctions. Resolve that chain before
   # copying; otherwise robocopy /XJ skips the package and leaves a dangling
