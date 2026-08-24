@@ -13,7 +13,7 @@ $seen=@{}
 $tempRoot=if($env:RUNNER_TEMP){$env:RUNNER_TEMP}else{[IO.Path]::GetTempPath()}
 
 function Copy-Dependency([string]$name) {
-  if($seen[$name] -or $name.StartsWith('@deepseek-ai/')) { return }
+  if($seen[$name] -or $name.StartsWith('@deepseek-ai/dsh-')) { return }
   $from=Join-Path $sourceModules $name
   $manifest=Join-Path $from 'package.json'
   if(!(Test-Path -LiteralPath $manifest)) {
