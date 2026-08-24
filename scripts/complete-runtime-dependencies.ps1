@@ -17,7 +17,14 @@ function Copy-Dependency([string]$name) {
   $seen[$name]=$true
   $from=Join-Path $sourceModules $name
   $manifest=Join-Path $from 'package.json'
-  if(!(Test-Path -LiteralPath $manifest)) { return }
+  if(!(Test-Path -LiteralPath $manifest) -and $name -eq 'zod') {
+    $from=Get-ChildItem (Join-Path $sourceModules '.pnpm') -Directory -Filter 'zod@*' -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName 'node_modules\zod' } |
+      Where-Object { Test-Path -LiteralPath (Join-Path $_ 'package.json') } |
+      Select-Object -First 1
+    if($from) { $manifest=Join-Path $from 'package.json' }
+  }
+  if(!$from -or !(Test-Path -LiteralPath $manifest)) { return }
   $to=Join-Path $runtimeModules $name
   New-Item -ItemType Directory -Path $to -Force | Out-Null
   # pnpm exposes packages through junctions. Resolve that chain before
