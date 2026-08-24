@@ -20,7 +20,22 @@ function Copy-Dependency([string]$name) {
   if(!(Test-Path -LiteralPath $manifest)) { return }
   $to=Join-Path $runtimeModules $name
   New-Item -ItemType Directory -Path $to -Force | Out-Null
-  robocopy $from $to /E /XD node_modules /NFL /NDL /NJH /NJS /NP | Out-Null
+  # pnpm exposes packages through junctions. Resolve that chain before
+  # copying; otherwise robocopy /XJ skips the package and leaves a dangling
+  # link in the release archive.
+  $copyFrom=$from
+  for($hop=0;$hop-lt 8;$hop++) {
+    $item=Get-Item -LiteralPath $copyFrom -Force
+    if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { break }
+    $target=$item.Target
+    if($target -is [array]) { $target=$target[0] }
+    if([string]::IsNullOrWhiteSpace([string]$target)) { break }
+    if(-not [IO.Path]::IsPathRooted([string]$target)) {
+      $target=Join-Path (Split-Path -Parent $copyFrom) ([string]$target)
+    }
+    $copyFrom=(Resolve-Path -LiteralPath $target).Path
+  }
+  robocopy $copyFrom $to /E /XD node_modules /NFL /NDL /NJH /NJS /NP | Out-Null
   if($LASTEXITCODE -gt 7) { throw "Failed to copy runtime dependency $name." }
   $package=Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
   foreach($dependencies in @($package.dependencies,$package.optionalDependencies)) {
