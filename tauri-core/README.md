@@ -7,8 +7,9 @@ Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562E
 # Tauri shell
 
 This directory is an intentionally separate desktop shell for the Harness Web UI.
-It does not import DeepSeek Harness packages or modify the Harness runtime. The
-only contract is an HTTP URL, defaulting to `http://127.0.0.1:3080`.
+Release installers embed the official Harness CLI and private Node runtime, so
+the installed application does not download a separate core. In development,
+the only contract is an HTTP URL, defaulting to `http://127.0.0.1:3080`.
 
 ## Development
 
@@ -27,9 +28,9 @@ The Tauri dev command starts `deepseek-harness` through `beforeDevCommand` and o
 
 Start Harness Web independently, then launch the installed shell. The shell
 uses `http://127.0.0.1:3080` by default; set `DSH_WEB_URL` before launching it
-to use another address. This keeps the installer independent of the Harness
-runtime and its Node.js dependencies.
+to use another address.
 
 ## Updates
 
-The Windows shell checks the latest GitHub Release at startup and installs a signed update when one is available.
+The Windows shell can update the complete installer through Tauri updater. The
+Harness core is not downloaded or replaced separately.

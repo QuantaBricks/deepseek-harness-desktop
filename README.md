@@ -36,8 +36,8 @@ pnpm --dir deepseek-harness run build
 pnpm --dir tauri-core exec tauri dev
 ```
 
-The shell starts Harness Web on `http://127.0.0.1:3080` during development. Windows installers include the official Harness CLI and a private Node runtime, so the desktop shell starts `dsh web` itself. Set `DSH_WEB_URL` only when intentionally connecting to an independently managed Harness Web service.
+The shell starts Harness Web on `http://127.0.0.1:3080` during development. Windows installers embed the official Harness CLI and a private Node runtime, so the installed application works without downloading a separate core. Set `DSH_WEB_URL` only when intentionally connecting to an independently managed Harness Web service.
 
 ## Upstream updates and releases
 
-GitHub Actions checks the official Harness `master` branch every day. When it changes, the workflow advances only the `deepseek-harness` submodule pointer, builds the Web UI and signed Windows installer, then publishes a GitHub Release. No manual merge of the Harness source is required.
+GitHub Actions checks the official Harness `master` branch every day. When it changes, the workflow advances only the `deepseek-harness` submodule pointer, builds the Web UI and signed self-contained Windows installer, then publishes a GitHub Release. No manual merge of the Harness source is required.

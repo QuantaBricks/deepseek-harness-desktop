@@ -10,9 +10,36 @@ function Get-RelativePath($from,$to) {
   $toUri=[Uri]::new($to)
   [Uri]::UnescapeDataString($fromUri.MakeRelativeUri($toUri).ToString()).Replace('/','\')
 }
-Get-ChildItem -LiteralPath $root -Recurse -Force -Attributes ReparsePoint -ErrorAction SilentlyContinue |
-  Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 } |
-  ForEach-Object {
+$pending=[Collections.Generic.Stack[string]]::new()
+$pending.Push($root)
+$visited=@{}
+$reparse=@()
+while($pending.Count -gt 0) {
+  $current=(Resolve-Path -LiteralPath $pending.Pop()).Path
+  if($visited[$current]) { continue }
+  $visited[$current]=$true
+  foreach($item in @(Get-ChildItem -LiteralPath $current -Force -ErrorAction SilentlyContinue)) {
+    if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      $reparse += $item
+      $target=(Get-Item -LiteralPath $item.FullName -Force).Target
+      if($target -is [array]) { $target=$target[0] }
+      if(-not [string]::IsNullOrWhiteSpace([string]$target)) {
+        if(-not [IO.Path]::IsPathRooted([string]$target)) {
+          $target=Join-Path (Split-Path -Parent $item.FullName) ([string]$target)
+        }
+        if(Test-Path -LiteralPath $target) {
+          $target=(Resolve-Path -LiteralPath $target).Path
+          if($target.StartsWith($root,[StringComparison]::OrdinalIgnoreCase) -and (Get-Item -LiteralPath $target -Force).PSIsContainer) {
+            $pending.Push($target)
+          }
+        }
+      }
+    } elseif($item.PSIsContainer) {
+      $pending.Push($item.FullName)
+    }
+  }
+}
+$reparse | ForEach-Object {
     $target=(Get-Item -LiteralPath $_.FullName -Force).Target
     if($target -is [array]) { $target=$target[0] }
     if(-not [string]::IsNullOrWhiteSpace([string]$target)) {

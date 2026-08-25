@@ -79,27 +79,26 @@ jobs:
         if: steps.sync.outputs.publish == 'true'
         run: pnpm --dir deepseek-harness run build
 
-      # The desktop shell stays small. Harness is published as a separately
-      # versioned asset so clients can update only the kernel when upstream
-      # changes, instead of reinstalling the shell.
-      - name: Prepare versioned Harness core asset
+      # The installer is self-contained. The runtime is archived before Tauri
+      # sees it, so NSIS never traverses pnpm junctions.
+      - name: Prepare embedded Harness runtime
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
         run: |
-          $core = Join-Path $env:RUNNER_TEMP 'harness-core'
-          New-Item -ItemType Directory -Path $core | Out-Null
-          pnpm --dir deepseek-harness deploy --filter @deepseek-ai/dsh --prod --config.inject-workspace-packages=true "$core\harness"
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-runtime-packages.ps1 -Source deepseek-harness -Runtime "$core\harness"
-          Copy-Item (Get-Command node).Source "$core\node.exe"
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/complete-runtime-dependencies.ps1 -Source deepseek-harness -Core $core
-          $manifest = [ordered]@{
-            version = '${{ steps.sync.outputs.version }}'
-            upstream = (git -C deepseek-harness rev-parse HEAD)
-            url = "https://github.com/${{ github.repository }}/releases/download/${{ steps.sync.outputs.tag }}/harness-core-win-x64.zip"
+          $runtime = 'C:\dsh'
+          if (Test-Path $runtime) { Remove-Item $runtime -Recurse -Force }
+          New-Item -ItemType Directory -Path $runtime | Out-Null
+          pnpm --dir deepseek-harness deploy --filter @deepseek-ai/dsh --prod --legacy "$runtime\harness"
+          Copy-Item (Get-Command node).Source "$runtime\node.exe"
+          if (!(Test-Path "$runtime\harness\lib\bin.js")) {
+            throw 'Embedded Harness deploy did not contain harness/lib/bin.js.'
           }
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pack-core.ps1 -Core $core -Archive "$env:RUNNER_TEMP/harness-core-win-x64.zip"
-          $manifest.sha256 = (Get-FileHash "$env:RUNNER_TEMP\harness-core-win-x64.zip" -Algorithm SHA256).Hash.ToLower()
-          $manifest | ConvertTo-Json | Set-Content "$env:RUNNER_TEMP\core-manifest.json" -Encoding utf8
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-runtime-packages.ps1 `
+            -Source deepseek-harness `
+            -Runtime "$runtime\harness"
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pack-core.ps1 `
+            -Core $runtime `
+            -Archive "$env:RUNNER_TEMP\harness-core.zip"
 
       - name: Install Rust
         if: steps.sync.outputs.publish == 'true'
@@ -112,8 +111,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          # Stage only the lightweight shell. The Harness runtime is a separate
-          # release asset, so NSIS never expands its dependency junctions.
+          # Stage at a short path to keep Windows resource paths below MAX_PATH.
           $stage = 'C:\w'
           if (Test-Path $stage) {
             Remove-Item $stage -Recurse -Force
@@ -123,6 +121,9 @@ jobs:
           if ($LASTEXITCODE -gt 7) { throw "Failed to stage Tauri shell (robocopy exit $LASTEXITCODE)." }
           $config = Get-Content "$stage\t\src-tauri\tauri.conf.json" -Raw | ConvertFrom-Json
           $config.version = $env:DESKTOP_VERSION
+          $config.bundle.resources = [ordered]@{
+            "$env:RUNNER_TEMP\harness-core.zip" = 'r/harness-core.zip'
+          }
           $releaseConfig = $config | ConvertTo-Json -Depth 100
           $releaseConfig | Set-Content "$stage\t\src-tauri\tauri.release.conf.json" -Encoding utf8
           pnpm --dir "$stage\t" install --frozen-lockfile
@@ -178,8 +179,6 @@ jobs:
           $assets = Get-ChildItem C:\w\t\src-tauri\target\release\bundle -Recurse -File |
             Where-Object { $_.Extension -in '.msi', '.exe', '.sig' -or $_.Name -eq 'latest.json' } |
             ForEach-Object { $_.FullName }
-          $assets += "$env:RUNNER_TEMP\harness-core-win-x64.zip"
-          $assets += "$env:RUNNER_TEMP\core-manifest.json"
           if ($assets.Count -eq 0) {
             throw 'Tauri build did not produce release assets.'
           }
