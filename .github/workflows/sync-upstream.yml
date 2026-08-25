@@ -133,9 +133,10 @@ jobs:
           $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID"
           $config = Get-Content "$stage\t\src-tauri\tauri.conf.json" -Raw | ConvertFrom-Json
           $config.version = $env:DESKTOP_VERSION
-          $config.bundle.resources = [ordered]@{
+          $resources = [ordered]@{
             "$env:RUNNER_TEMP\harness-core.zip" = 'r/harness-core.zip'
           }
+          $config.bundle | Add-Member -MemberType NoteProperty -Name resources -Value $resources -Force
           $releaseConfig = $config | ConvertTo-Json -Depth 100
           $releaseConfig | Set-Content "$stage\t\src-tauri\tauri.release.conf.json" -Encoding utf8
           pnpm --dir "$stage\t" exec tauri build --config src-tauri/tauri.release.conf.json
