@@ -112,7 +112,10 @@ jobs:
           # MAX_PATH without relying on runner-temp cleanup semantics.
           $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID"
           New-Item -ItemType Directory -Path "$stage\t" -Force | Out-Null
-          robocopy tauri-core "$stage\t" /E /XD target r
+          # Runtime folders are generated artifacts and must not be copied
+          # into the staged Tauri source; the release config injects the fresh
+          # embedded archive explicitly below.
+          robocopy tauri-core "$stage\t" /E /XD target r runtime runtime-test core
           if ($LASTEXITCODE -gt 7) { throw "Failed to stage Tauri shell (robocopy exit $LASTEXITCODE)." }
 
       - name: Install Tauri build dependencies
