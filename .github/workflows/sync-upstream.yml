@@ -111,8 +111,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          # Stage at a short path to keep Windows resource paths below MAX_PATH.
-          $stage = 'C:\w'
+          # Stage at a short, runner-owned path to keep Windows resource paths
+          # below MAX_PATH without colliding with another job's C:\w directory.
+          $stage = Join-Path $env:RUNNER_TEMP 'dsh-build'
           if (Test-Path $stage) {
             Remove-Item $stage -Recurse -Force
           }
