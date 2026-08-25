@@ -108,12 +108,9 @@ jobs:
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
         run: |
-          # Stage at a short, runner-owned path to keep Windows resource paths
-          # below MAX_PATH without colliding with another job's C:\w directory.
-          $stage = Join-Path $env:RUNNER_TEMP 'dsh-build'
-          if (Test-Path $stage) {
-            Remove-Item $stage -Recurse -Force
-          }
+          # Stage at a unique short path to keep Windows resource paths below
+          # MAX_PATH without relying on runner-temp cleanup semantics.
+          $stage = "C:\dsh-build-$env:GITHUB_RUN_ID"
           New-Item -ItemType Directory -Path "$stage\t" -Force | Out-Null
           robocopy tauri-core "$stage\t" /E /XD target r
           if ($LASTEXITCODE -gt 7) { throw "Failed to stage Tauri shell (robocopy exit $LASTEXITCODE)." }
@@ -121,7 +118,7 @@ jobs:
       - name: Install Tauri build dependencies
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
-        run: pnpm --dir "$env:RUNNER_TEMP\dsh-build\t" install --frozen-lockfile
+        run: pnpm --dir "C:\dsh-build-$env:GITHUB_RUN_ID\t" install --frozen-lockfile
 
       - name: Build signed Windows installer
         if: steps.sync.outputs.publish == 'true'
@@ -130,7 +127,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          $stage = Join-Path $env:RUNNER_TEMP 'dsh-build'
+          $stage = "C:\dsh-build-$env:GITHUB_RUN_ID"
           $config = Get-Content "$stage\t\src-tauri\tauri.conf.json" -Raw | ConvertFrom-Json
           $config.version = $env:DESKTOP_VERSION
           $config.bundle.resources = [ordered]@{
