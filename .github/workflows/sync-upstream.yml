@@ -111,12 +111,21 @@ jobs:
           # Stage at a unique short path to keep Windows resource paths below
           # MAX_PATH without relying on runner-temp cleanup semantics.
           $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID"
-          New-Item -ItemType Directory -Path "$stage\t" -Force | Out-Null
+          $source = Join-Path $env:GITHUB_WORKSPACE 'tauri-core'
+          $destination = Join-Path $stage 't'
+          if (!(Test-Path -LiteralPath $source -PathType Container)) {
+            throw "Tauri source directory was not found: $source"
+          }
+          New-Item -ItemType Directory -Path $destination -Force | Out-Null
           # Runtime folders are generated artifacts and must not be copied
           # into the staged Tauri source; the release config injects the fresh
           # embedded archive explicitly below.
-          robocopy tauri-core "$stage\t" /E /XD target r runtime runtime-test core
-          if ($LASTEXITCODE -gt 7) { throw "Failed to stage Tauri shell (robocopy exit $LASTEXITCODE)." }
+          robocopy $source $destination /E /XD target r runtime runtime-test core node_modules
+          $copyExit = $LASTEXITCODE
+          if ($copyExit -gt 7) { throw "Failed to stage Tauri shell from $source to $destination (robocopy exit $copyExit)." }
+          if (!(Test-Path -LiteralPath (Join-Path $destination 'src-tauri\tauri.conf.json') -PathType Leaf)) {
+            throw "Tauri source was copied but tauri.conf.json is missing from $destination"
+          }
 
       - name: Create Tauri release config
         if: steps.sync.outputs.publish == 'true'
