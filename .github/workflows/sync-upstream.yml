@@ -119,10 +119,12 @@ jobs:
           New-Item -ItemType Directory -Path $destination -Force | Out-Null
           # Runtime folders are generated artifacts and must not be copied
           # into the staged Tauri source; the release config injects the fresh
-          # embedded archive explicitly below.
-          robocopy $source $destination /E /XD target r runtime runtime-test core node_modules
-          $copyExit = $LASTEXITCODE
-          if ($copyExit -gt 7) { throw "Failed to stage Tauri shell from $source to $destination (robocopy exit $copyExit)." }
+          # embedded archive explicitly below. Use native PowerShell copying so
+          # the step does not depend on robocopy's special exit-code contract.
+          $excluded = @('target', 'r', 'runtime', 'runtime-test', 'core', 'node_modules')
+          Get-ChildItem -LiteralPath $source -Force |
+            Where-Object { $excluded -notcontains $_.Name } |
+            Copy-Item -Destination $destination -Recurse -Force
           if (!(Test-Path -LiteralPath (Join-Path $destination 'src-tauri\tauri.conf.json') -PathType Leaf)) {
             throw "Tauri source was copied but tauri.conf.json is missing from $destination"
           }
