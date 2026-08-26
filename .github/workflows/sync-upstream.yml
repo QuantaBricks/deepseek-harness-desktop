@@ -118,16 +118,10 @@ jobs:
           robocopy tauri-core "$stage\t" /E /XD target r runtime runtime-test core
           if ($LASTEXITCODE -gt 7) { throw "Failed to stage Tauri shell (robocopy exit $LASTEXITCODE)." }
 
-      - name: Install Tauri build dependencies
-        if: steps.sync.outputs.publish == 'true'
-        shell: pwsh
-        run: pnpm --dir "$env:GITHUB_WORKSPACE\.dsh-build-$env:GITHUB_RUN_ID\t" install --frozen-lockfile
-
-      - name: Build signed Windows installer
+      - name: Create Tauri release config
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
         run: |
           $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID"
@@ -139,6 +133,19 @@ jobs:
           $config.bundle | Add-Member -MemberType NoteProperty -Name resources -Value $resources -Force
           $releaseConfig = $config | ConvertTo-Json -Depth 100
           $releaseConfig | Set-Content "$stage\t\src-tauri\tauri.release.conf.json" -Encoding utf8
+
+      - name: Install Tauri build dependencies
+        if: steps.sync.outputs.publish == 'true'
+        shell: pwsh
+        run: pnpm --dir "$env:GITHUB_WORKSPACE\.dsh-build-$env:GITHUB_RUN_ID\t" install --frozen-lockfile
+
+      - name: Build signed Windows installer
+        if: steps.sync.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID"
           pnpm --dir "$stage\t" exec tauri build --config src-tauri/tauri.release.conf.json
 
       - name: Generate Tauri updater manifest
@@ -148,7 +155,7 @@ jobs:
           TAG: ${{ steps.sync.outputs.tag }}
           VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          $bundle = Resolve-Path C:\w\t\src-tauri\target\release\bundle\nsis
+          $bundle = Resolve-Path (Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\t\src-tauri\target\release\bundle\nsis")
           $installer = Get-ChildItem $bundle -Filter '*-setup.exe' | Select-Object -First 1
           $signature = Get-Content "$($installer.FullName).sig" -Raw
           $manifest = [ordered]@{
