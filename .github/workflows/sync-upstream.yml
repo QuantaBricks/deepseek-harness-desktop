@@ -206,7 +206,11 @@ jobs:
           VERSION: ${{ steps.sync.outputs.version }}
           RELEASE_SHA: ${{ steps.commit.outputs.sha || steps.current.outputs.sha }}
         run: |
-          $assets = Get-ChildItem C:\w\t\src-tauri\target\release\bundle -Recurse -File |
+          $bundle = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\t\src-tauri\target\release\bundle"
+          if (!(Test-Path -LiteralPath $bundle -PathType Container)) {
+            throw "Tauri bundle directory was not found: $bundle"
+          }
+          $assets = Get-ChildItem $bundle -Recurse -File |
             Where-Object { $_.Extension -in '.msi', '.exe', '.sig' -or $_.Name -eq 'latest.json' } |
             ForEach-Object { $_.FullName }
           if ($assets.Count -eq 0) {
