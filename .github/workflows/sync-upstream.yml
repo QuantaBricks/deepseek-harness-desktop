@@ -186,6 +186,11 @@ jobs:
           VERSION: ${{ steps.sync.outputs.version }}
           RELEASE_SHA: ${{ steps.commit.outputs.sha || steps.current.outputs.sha }}
         run: |
+          $oldReleases = gh release list --limit 100 --json tagName | ConvertFrom-Json |
+            Where-Object { $_.tagName -like 'desktop-v*' }
+          foreach ($old in $oldReleases) {
+            gh release delete $old.tagName --yes --cleanup-tag
+          }
           $bundle = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron\t\dist"
           $assets = Get-ChildItem $bundle -Recurse -File |
             Where-Object { $_.Extension -eq '.exe' -or $_.Name -eq 'latest.json' } |
