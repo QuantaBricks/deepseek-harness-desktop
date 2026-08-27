@@ -80,7 +80,8 @@ fn embedded_core(app: &AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>>
         let target = path
             .parent()
             .ok_or("invalid embedded link")?
-            .join(&link.target);
+            .join(&link.target)
+            .canonicalize()?;
         if path.exists() || fs::symlink_metadata(&path).is_ok() {
             if path.is_dir() {
                 fs::remove_dir_all(&path)?;
