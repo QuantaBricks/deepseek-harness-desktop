@@ -79,8 +79,8 @@ jobs:
         if: steps.sync.outputs.publish == 'true'
         run: pnpm --dir deepseek-harness run build
 
-      # The installer is self-contained. The runtime is archived before Tauri
-      # sees it, so NSIS never traverses pnpm junctions.
+      # The installer is self-contained. The runtime is archived before
+      # Electron sees it, so the installer never traverses pnpm junctions.
       - name: Prepare embedded Harness runtime
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
@@ -100,87 +100,45 @@ jobs:
             -Core $runtime `
             -Archive "$env:RUNNER_TEMP\harness-core.zip"
 
-      - name: Install Rust
-        if: steps.sync.outputs.publish == 'true'
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Stage Tauri Windows build
+      - name: Stage Electron Windows build
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
         run: |
-          # Stage at a unique short path to keep Windows resource paths below
-          # MAX_PATH without relying on runner-temp cleanup semantics.
-          $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID"
-          $source = Join-Path $env:GITHUB_WORKSPACE 'tauri-core'
+          $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron"
+          $source = Join-Path $env:GITHUB_WORKSPACE 'electron-core'
           $destination = Join-Path $stage 't'
           if (!(Test-Path -LiteralPath $source -PathType Container)) {
-            throw "Tauri source directory was not found: $source"
+            throw "Electron source directory was not found: $source"
           }
           New-Item -ItemType Directory -Path $destination -Force | Out-Null
-          # Runtime folders are generated artifacts and must not be copied
-          # into the staged Tauri source; the release config injects the fresh
-          # embedded archive explicitly below. Use native PowerShell copying so
-          # the step does not depend on robocopy's special exit-code contract.
-          $excluded = @('target', 'r', 'runtime', 'runtime-test', 'core', 'node_modules')
+          $excluded = @('dist', 'r', 'node_modules')
           Get-ChildItem -LiteralPath $source -Force |
             Where-Object { $excluded -notcontains $_.Name } |
             Copy-Item -Destination $destination -Recurse -Force
-          if (!(Test-Path -LiteralPath (Join-Path $destination 'src-tauri\tauri.conf.json') -PathType Leaf)) {
-            throw "Tauri source was copied but tauri.conf.json is missing from $destination"
+          New-Item -ItemType Directory -Path (Join-Path $destination 'r') -Force | Out-Null
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'harness-core.zip') (Join-Path $destination 'r\harness-core.zip') -Force
+          if (!(Test-Path -LiteralPath (Join-Path $destination 'main.cjs') -PathType Leaf)) {
+            throw "Electron source was copied but main.cjs is missing from $destination"
           }
 
-      - name: Create Tauri release config
+      - name: Install Electron build dependencies
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
-        env:
-          DESKTOP_VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID"
-          $config = Get-Content "$stage\t\src-tauri\tauri.conf.json" -Raw | ConvertFrom-Json
-          $config.version = $env:DESKTOP_VERSION
-          $resources = [ordered]@{
-            "$env:RUNNER_TEMP\harness-core.zip" = 'r/harness-core.zip'
-          }
-          $config.bundle | Add-Member -MemberType NoteProperty -Name resources -Value $resources -Force
-          $releaseConfig = $config | ConvertTo-Json -Depth 100
-          $releaseConfig | Set-Content "$stage\t\src-tauri\tauri.release.conf.json" -Encoding utf8
+          $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron\t"
+          pnpm --dir $stage install --no-frozen-lockfile
 
-      - name: Install Tauri build dependencies
-        if: steps.sync.outputs.publish == 'true'
-        shell: pwsh
-        run: pnpm --dir "$env:GITHUB_WORKSPACE\.dsh-build-$env:GITHUB_RUN_ID\t" install --frozen-lockfile
-
-      - name: Build signed Windows installer
+      - name: Build Electron Windows installer
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID"
-          pnpm --dir "$stage\t" exec tauri build --config src-tauri/tauri.release.conf.json
-
-      - name: Generate Tauri updater manifest
-        if: steps.sync.outputs.publish == 'true'
-        shell: pwsh
-        env:
-          TAG: ${{ steps.sync.outputs.tag }}
           VERSION: ${{ steps.sync.outputs.version }}
         run: |
-          $bundle = Resolve-Path (Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\t\src-tauri\target\release\bundle\nsis")
-          $installer = Get-ChildItem $bundle -Filter '*-setup.exe' | Select-Object -First 1
-          $signature = Get-Content "$($installer.FullName).sig" -Raw
-          $manifest = [ordered]@{
-            version = $env:VERSION
-            notes = "DeepSeek Harness Desktop $env:VERSION"
-            pub_date = [DateTime]::UtcNow.ToString('o')
-            platforms = [ordered]@{
-              'windows-x86_64' = [ordered]@{
-                signature = $signature.Trim()
-                url = "https://github.com/QuantaBricks/deepseek-harness-desktop/releases/download/$env:TAG/$($installer.Name)"
-              }
-            }
-          }
-          $manifest | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $bundle 'latest.json') -Encoding utf8
+          $stage = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron\t"
+          $package = Get-Content (Join-Path $stage 'package.json') -Raw | ConvertFrom-Json
+          $package.version = $env:VERSION
+          $package | ConvertTo-Json -Depth 50 | Set-Content (Join-Path $stage 'package.json') -Encoding utf8
+          pnpm --dir $stage run build
 
       - name: Commit updated Harness pointer
         if: steps.sync.outputs.publish == 'true' && steps.sync.outputs.source_updated == 'True'
@@ -197,6 +155,28 @@ jobs:
         shell: pwsh
         run: '"sha=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT'
 
+      - name: Generate Electron updater manifest
+        if: steps.sync.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          TAG: ${{ steps.sync.outputs.tag }}
+          VERSION: ${{ steps.sync.outputs.version }}
+        run: |
+          $bundle = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron\t\dist"
+          $installer = Get-ChildItem $bundle -Filter '*-setup.exe' | Select-Object -First 1
+          if (!$installer) { throw 'Electron build did not produce an installer.' }
+          $manifest = [ordered]@{
+            version = $env:VERSION
+            notes = "DeepSeek Harness Desktop $env:VERSION"
+            pub_date = [DateTime]::UtcNow.ToString('o')
+            platforms = [ordered]@{
+              'windows-x86_64' = [ordered]@{
+                url = "https://github.com/QuantaBricks/deepseek-harness-desktop/releases/download/$env:TAG/$($installer.Name)"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $bundle 'latest.json') -Encoding utf8
+
       - name: Publish GitHub Release
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
@@ -206,14 +186,9 @@ jobs:
           VERSION: ${{ steps.sync.outputs.version }}
           RELEASE_SHA: ${{ steps.commit.outputs.sha || steps.current.outputs.sha }}
         run: |
-          $bundle = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\t\src-tauri\target\release\bundle"
-          if (!(Test-Path -LiteralPath $bundle -PathType Container)) {
-            throw "Tauri bundle directory was not found: $bundle"
-          }
+          $bundle = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron\t\dist"
           $assets = Get-ChildItem $bundle -Recurse -File |
-            Where-Object { $_.Extension -in '.msi', '.exe', '.sig' -or $_.Name -eq 'latest.json' } |
+            Where-Object { $_.Extension -eq '.exe' -or $_.Name -eq 'latest.json' } |
             ForEach-Object { $_.FullName }
-          if ($assets.Count -eq 0) {
-            throw 'Tauri build did not produce release assets.'
-          }
+          if ($assets.Count -eq 0) { throw 'Electron build did not produce release assets.' }
           gh release create $env:TAG --target $env:RELEASE_SHA --title "DeepSeek Harness Desktop $env:VERSION" --generate-notes $assets

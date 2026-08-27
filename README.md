@@ -1,5 +1,4 @@
 <p align="center">
-  <img src="tauri-core/assets/quanta-logo.png" alt="QuantaBricks" width="150">
 </p>
 
 # DeepSeek Harness Desktop
@@ -11,7 +10,7 @@ Welcome to our Discord channel: [Join Discord](https://discord.com/invite/xJ562E
 ## Layout
 
 - `deepseek-harness/` — the official DeepSeek Harness repository, pinned as a Git submodule.
-- `tauri-core/` — the independently buildable Tauri desktop shell. It communicates with Harness only over HTTP.
+- `electron-core/` — the independently buildable Electron desktop shell. It embeds the Harness runtime and communicates with it over HTTP.
 - `extension/` — QuantaBricks extensions, including planned chemistry-simulation adaptations.
 
 ## Get started
@@ -33,7 +32,8 @@ Build the Harness Web UI and start the desktop shell:
 ```sh
 pnpm --dir deepseek-harness install
 pnpm --dir deepseek-harness run build
-pnpm --dir tauri-core exec tauri dev
+pnpm --dir electron-core install
+pnpm --dir electron-core dev
 ```
 
 The shell starts Harness Web on `http://127.0.0.1:3080` during development. Windows installers embed the official Harness CLI and a private Node runtime, so the installed application works without downloading a separate core. Set `DSH_WEB_URL` only when intentionally connecting to an independently managed Harness Web service.

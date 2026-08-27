@@ -1,0 +1,47 @@
+{
+  "name": "deepseek-harness-desktop",
+  "productName": "DeepSeek Harness",
+  "version": "0.2.0",
+  "description": "DeepSeek Harness desktop application",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "extract-zip": "^2.0.1"
+  },
+  "devDependencies": {
+    "electron": "^38.1.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "ai.deepseek.dsh.shell",
+    "productName": "DeepSeek Harness",
+    "artifactName": "D_${version}_${arch}-setup.${ext}",
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "loader/**",
+      "node_modules/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "r/harness-core.zip",
+        "to": "r/harness-core.zip"
+      }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
