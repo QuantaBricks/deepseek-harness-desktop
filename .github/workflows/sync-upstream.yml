@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: harness-desktop-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   sync-and-publish:
