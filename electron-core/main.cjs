@@ -1,13 +1,14 @@
-const { app, BrowserWindow, dialog } = require('electron')
+const { app, BrowserWindow, dialog, Menu } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const { spawn } = require('child_process')
 const { createConnection } = require('net')
 const fs = require('fs')
 const path = require('path')
-const extractZip = require('extract-zip')
 
 const PORT = 3080
 const HOST = '127.0.0.1'
 let coreProcess
+let mainWindow
 
 function logError(error) {
   const logPath = path.join(app.getPath('userData'), 'startup-error.txt')
@@ -15,42 +16,10 @@ function logError(error) {
   fs.writeFileSync(logPath, String(error && error.stack ? error.stack : error))
 }
 
-function createJunctions(core) {
-  const linksPath = path.join(core, 'links.json')
-  if (!fs.existsSync(linksPath)) return
-  const links = JSON.parse(fs.readFileSync(linksPath, 'utf8').replace(/^\uFEFF/, ''))
-  for (const link of links) {
-    const linkPath = path.join(core, link.path)
-    const target = path.resolve(path.dirname(linkPath), link.target)
-    if (!fs.existsSync(target)) throw new Error(`Embedded dependency target is missing: ${target}`)
-    fs.mkdirSync(path.dirname(linkPath), { recursive: true })
-    try {
-      fs.rmSync(linkPath, { recursive: true, force: true })
-    } catch {}
-    fs.symlinkSync(target, linkPath, 'junction')
-  }
-}
-
-async function prepareCore() {
-  const userData = app.getPath('userData')
-  const core = path.join(userData, 'harness-core')
-  const node = path.join(core, 'node.exe')
-  const cli = path.join(core, 'harness', 'lib', 'bin.js')
-  if (fs.existsSync(node) && fs.existsSync(cli)) return core
-
-  const archive = path.join(process.resourcesPath, 'r', 'harness-core.zip')
-  if (!fs.existsSync(archive)) throw new Error(`Embedded runtime archive is missing: ${archive}`)
-  const staging = `${core}.next`
-  fs.rmSync(staging, { recursive: true, force: true })
-  fs.mkdirSync(staging, { recursive: true })
-  await extractZip(archive, { dir: staging })
-  if (!fs.existsSync(path.join(staging, 'node.exe')) || !fs.existsSync(path.join(staging, 'harness', 'lib', 'bin.js'))) {
-    throw new Error('Embedded Harness runtime is incomplete')
-  }
-  fs.rmSync(core, { recursive: true, force: true })
-  fs.renameSync(staging, core)
-  createJunctions(core)
-  return core
+function corePath() {
+  const installed = path.join(process.resourcesPath, 'r', 'harness-core')
+  if (fs.existsSync(path.join(installed, 'node.exe')) && fs.existsSync(path.join(installed, 'harness', 'lib', 'bin.js'))) return installed
+  throw new Error(`Installed Harness runtime is missing: ${installed}`)
 }
 
 function waitForServer(timeout = 30000) {
@@ -69,30 +38,53 @@ function waitForServer(timeout = 30000) {
   })
 }
 
-async function start() {
-  const core = await prepareCore()
+function checkForUpdates() {
+  return autoUpdater.checkForUpdates().then((result) => {
+    if (!result || !result.updateInfo || result.updateInfo.version === app.getVersion()) {
+      dialog.showMessageBox(mainWindow, { type: 'info', title: '检查更新', message: '当前已经是最新版本。' })
+    }
+  }).catch((error) => dialog.showErrorBox('检查更新失败', error.message || String(error)))
+}
+
+function configureUpdater() {
+  autoUpdater.autoDownload = false
+  autoUpdater.on('update-available', async (info) => {
+    const result = await dialog.showMessageBox(mainWindow, { type: 'info', title: '发现新版本', message: `发现 DeepSeek Harness ${info.version}，是否下载？`, buttons: ['下载并安装', '稍后'] })
+    if (result.response === 0) await autoUpdater.downloadUpdate()
+  })
+  autoUpdater.on('update-downloaded', async () => {
+    const result = await dialog.showMessageBox(mainWindow, { type: 'info', title: '更新已下载', message: '更新已下载完成，重启后安装。', buttons: ['立即重启', '稍后'] })
+    if (result.response === 0) autoUpdater.quitAndInstall()
+  })
+}
+
+function createMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'DeepSeek Harness', submenu: [
+    { label: '检查更新…', click: checkForUpdates },
+    { type: 'separator' },
+    { role: 'quit', label: '退出' }
+  ] }]))
+}
+
+async function startCore() {
+  const core = corePath()
   const node = path.join(core, 'node.exe')
   const cli = path.join(core, 'harness', 'lib', 'bin.js')
-  coreProcess = spawn(node, [cli, 'web', '--host', HOST, '--port', String(PORT), '--no-open'], {
-    cwd: path.join(core, 'harness'),
-    windowsHide: true,
-    stdio: 'ignore'
-  })
+  coreProcess = spawn(node, [cli, 'web', '--host', HOST, '--port', String(PORT), '--no-open'], { cwd: path.join(core, 'harness'), windowsHide: true, stdio: 'ignore' })
   coreProcess.once('error', (error) => logError(error))
   await waitForServer()
-  const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 960,
-    minHeight: 640,
-    title: 'DeepSeek Harness',
-    webPreferences: { contextIsolation: true, sandbox: true }
-  })
-  await win.loadURL(`http://${HOST}:${PORT}`)
+  await mainWindow.loadURL(`http://${HOST}:${PORT}`)
 }
 
 app.whenReady().then(async () => {
-  try { await start() } catch (error) {
+  mainWindow = new BrowserWindow({ width: 1440, height: 900, minWidth: 960, minHeight: 640, title: 'DeepSeek Harness' })
+  await mainWindow.loadFile(path.join(__dirname, 'loader', 'index.html'))
+  createMenu()
+  configureUpdater()
+  try {
+    await startCore()
+    setTimeout(() => { void checkForUpdates() }, 10000)
+  } catch (error) {
     logError(error)
     dialog.showErrorBox('DeepSeek Harness 启动失败', String(error.message || error))
     app.quit()

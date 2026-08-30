@@ -79,8 +79,9 @@ jobs:
         if: steps.sync.outputs.publish == 'true'
         run: pnpm --dir deepseek-harness run build
 
-      # The installer is self-contained. The runtime is archived before
-      # Electron sees it, so the installer never traverses pnpm junctions.
+      # Build a fully materialized runtime. Electron-builder copies this into
+      # the installer, so installation expands it once and startup does no
+      # runtime extraction.
       - name: Prepare embedded Harness runtime
         if: steps.sync.outputs.publish == 'true'
         shell: pwsh
@@ -88,7 +89,7 @@ jobs:
           $runtime = 'C:\dsh'
           if (Test-Path $runtime) { Remove-Item $runtime -Recurse -Force }
           New-Item -ItemType Directory -Path $runtime | Out-Null
-          pnpm --dir deepseek-harness deploy --filter @deepseek-ai/dsh --prod --legacy "$runtime\harness"
+          pnpm --dir deepseek-harness deploy --filter @deepseek-ai/dsh --prod --legacy --ignore-scripts "$runtime\harness"
           Copy-Item (Get-Command node).Source "$runtime\node.exe"
           if (!(Test-Path "$runtime\harness\lib\bin.js")) {
             throw 'Embedded Harness deploy did not contain harness/lib/bin.js.'
@@ -98,7 +99,7 @@ jobs:
             -Runtime "$runtime\harness"
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pack-core.ps1 `
             -Core $runtime `
-            -Archive "$env:RUNNER_TEMP\harness-core.zip"
+            -FlatOutput "$env:RUNNER_TEMP\harness-core"
 
       - name: Stage Electron Windows build
         if: steps.sync.outputs.publish == 'true'
@@ -116,7 +117,7 @@ jobs:
             Where-Object { $excluded -notcontains $_.Name } |
             Copy-Item -Destination $destination -Recurse -Force
           New-Item -ItemType Directory -Path (Join-Path $destination 'r') -Force | Out-Null
-          Copy-Item (Join-Path $env:RUNNER_TEMP 'harness-core.zip') (Join-Path $destination 'r\harness-core.zip') -Force
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'harness-core') (Join-Path $destination 'r\harness-core') -Recurse -Force
           if (!(Test-Path -LiteralPath (Join-Path $destination 'main.cjs') -PathType Leaf)) {
             throw "Electron source was copied but main.cjs is missing from $destination"
           }
@@ -193,7 +194,7 @@ jobs:
           }
           $bundle = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron\t\dist"
           $assets = Get-ChildItem $bundle -Recurse -File |
-            Where-Object { $_.Extension -eq '.exe' -or $_.Name -eq 'latest.json' } |
+            Where-Object { $_.Extension -in @('.exe', '.yml', '.blockmap') -or $_.Name -eq 'latest.json' } |
             ForEach-Object { $_.FullName }
           if ($assets.Count -eq 0) { throw 'Electron build did not produce release assets.' }
           gh release create $env:TAG --target $env:RELEASE_SHA --title "DeepSeek Harness Desktop $env:VERSION" --generate-notes $assets

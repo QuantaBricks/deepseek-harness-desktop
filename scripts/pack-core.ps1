@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Core,[Parameter(Mandatory=$true)][string]$Archive)
+param([Parameter(Mandatory=$true)][string]$Core,[string]$Archive,[string]$FlatOutput)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -106,16 +106,19 @@ try {
     }
     if(!$store) { continue }
     Remove-Item -LiteralPath $packagePath -Recurse -Force
-    & cmd.exe /c mklink /J "$packagePath" "$store" | Out-Null
-    $links += [ordered]@{
-      path=(Get-RelativePath $flat $packagePath).Replace('\\','/')
-      target=Get-RelativePath (Split-Path -Parent $packagePath) $store
-    }
+    Copy-Item -LiteralPath $store -Destination $packagePath -Recurse -Force
   }
-  $json=if($links.Count){$links|ConvertTo-Json -Depth 4}else{'[]'}
+  $json='[]'
   Set-Content -LiteralPath (Join-Path $flat 'links.json') -Value $json -Encoding utf8
-  if(Test-Path -LiteralPath $Archive) { [IO.File]::Delete($Archive) }
-  [IO.Compression.ZipFile]::CreateFromDirectory($flat,$Archive,[IO.Compression.CompressionLevel]::Fastest,$false)
+  if($Archive) {
+    if(Test-Path -LiteralPath $Archive) { [IO.File]::Delete($Archive) }
+    [IO.Compression.ZipFile]::CreateFromDirectory($flat,$Archive,[IO.Compression.CompressionLevel]::Fastest,$false)
+  }
+  if($FlatOutput) {
+    if(Test-Path -LiteralPath $FlatOutput) { Remove-Item -LiteralPath $FlatOutput -Recurse -Force }
+    New-Item -ItemType Directory -Path $FlatOutput -Force | Out-Null
+    Copy-Item -Path (Join-Path $flat '*') -Destination $FlatOutput -Recurse -Force
+  }
 } finally {
   Remove-Item -LiteralPath $flat -Recurse -Force -ErrorAction SilentlyContinue
 }

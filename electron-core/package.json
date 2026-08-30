@@ -10,7 +10,7 @@
     "build": "electron-builder --win nsis"
   },
   "dependencies": {
-    "extract-zip": "^2.0.1"
+    "electron-updater": "^6.6.2"
   },
   "devDependencies": {
     "electron": "^38.1.0",
@@ -29,8 +29,8 @@
     ],
     "extraResources": [
       {
-        "from": "r/harness-core.zip",
-        "to": "r/harness-core.zip"
+        "from": "r/harness-core",
+        "to": "r/harness-core"
       }
     ],
     "win": {
@@ -42,6 +42,12 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "QuantaBricks",
+      "repo": "deepseek-harness-desktop",
+      "releaseType": "release"
     }
   }
 }
