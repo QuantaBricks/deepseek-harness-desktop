@@ -36,18 +36,30 @@ foreach($file in $workspacePackages) {
 # through materialized workspace packages. Reconstruct the external dependency
 # closure from the deployed workspace package manifests.
 $sourceHoisted=Join-Path $sourceRoot 'node_modules\.pnpm\node_modules'
-if(Test-Path -LiteralPath $sourceHoisted) {
+$sourceStore=Join-Path $sourceRoot 'node_modules\.pnpm'
+if(Test-Path -LiteralPath $sourceStore) {
   $visited=@{}
+  function Find-SourcePackage([string]$packageName) {
+    $hoisted=Join-Path $sourceHoisted $packageName
+    if(Test-Path -LiteralPath $hoisted) {
+      $target=(Get-Item -LiteralPath $hoisted -Force).Target
+      if($target -is [array]) { $target=$target[0] }
+      if($target -and (Test-Path -LiteralPath $target)) { return (Resolve-Path -LiteralPath $target).Path }
+      if(Test-Path -LiteralPath (Join-Path $hoisted 'package.json')) { return $hoisted }
+    }
+    $encoded=$packageName.Replace('/','+')
+    return Get-ChildItem -LiteralPath $sourceStore -Directory -Filter ($encoded+'@*') -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName ('node_modules\'+$packageName) } |
+      Where-Object { Test-Path -LiteralPath (Join-Path $_ 'package.json') } |
+      Select-Object -First 1
+  }
   function Copy-ExternalPackage([string]$packageName) {
     if([string]::IsNullOrWhiteSpace($packageName) -or $visited[$packageName]) { return }
     if($packageName.StartsWith('node:') -or $packageName.StartsWith('workspace:')) { return }
     $visited[$packageName]=$true
-    $entry=Join-Path $sourceHoisted $packageName
-    if(-not (Test-Path -LiteralPath $entry)) { return }
     $destination=Join-Path $runtimeModules $packageName
-    $target=(Get-Item -LiteralPath $entry -Force).Target
-    if($target -is [array]) { $target=$target[0] }
-    if(-not $target -or -not (Test-Path -LiteralPath $target)) { return }
+    $target=Find-SourcePackage $packageName
+    if(-not $target) { return }
     $existing=Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue
     if($existing -and (($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
       & cmd.exe /c rmdir "$destination" | Out-Null

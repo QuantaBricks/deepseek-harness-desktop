@@ -97,9 +97,15 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-runtime-packages.ps1 `
             -Source deepseek-harness `
             -Runtime "$runtime\harness"
+          if (!(Test-Path "$runtime\harness\node_modules\js-yaml\package.json")) {
+            throw 'Runtime dependency closure is incomplete: js-yaml is missing.'
+          }
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pack-core.ps1 `
             -Core $runtime `
             -FlatOutput "$env:RUNNER_TEMP\harness-core"
+          if (!(Test-Path "$env:RUNNER_TEMP\harness-core\harness\node_modules\js-yaml\package.json")) {
+            throw 'Flattened runtime dependency closure is incomplete: js-yaml is missing.'
+          }
 
       - name: Stage Electron Windows build
         if: steps.sync.outputs.publish == 'true'
