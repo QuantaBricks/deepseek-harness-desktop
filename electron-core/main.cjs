@@ -1,7 +1,6 @@
 const { app, BrowserWindow, dialog, Menu } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const { spawn } = require('child_process')
-const { createConnection } = require('net')
 const fs = require('fs')
 const path = require('path')
 
@@ -22,19 +21,47 @@ function corePath() {
   throw new Error(`Installed Harness runtime is missing: ${installed}`)
 }
 
-function waitForServer(timeout = 30000) {
+function waitForLaunchUrl(child, timeout = 180000) {
   return new Promise((resolve, reject) => {
-    const started = Date.now()
-    const probe = () => {
-      const socket = createConnection({ host: HOST, port: PORT })
-      socket.once('connect', () => { socket.destroy(); resolve() })
-      socket.once('error', () => {
-        socket.destroy()
-        if (Date.now() - started >= timeout) reject(new Error('Embedded Harness did not become ready within 30 seconds'))
-        else setTimeout(probe, 250)
-      })
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+
+    const finish = (callback, value) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      callback(value)
     }
-    probe()
+
+    const timer = setTimeout(() => {
+      const detail = stderr.trim() || stdout.trim() || 'no output from embedded Harness'
+      finish(reject, new Error(`Embedded Harness did not publish its authenticated URL within ${Math.round(timeout / 1000)} seconds.\n${detail}`))
+    }, timeout)
+
+    child.stdout.on('data', (chunk) => {
+      stdout = (stdout + chunk.toString()).slice(-65536)
+      const match = stdout.match(/dsh web:\s+(http:\/\/[^\s]+)/)
+      if (!match) return
+
+      try {
+        const launchUrl = new URL(match[1])
+        if (launchUrl.hostname !== HOST || launchUrl.port !== String(PORT) || !launchUrl.searchParams.has('token')) return
+        finish(resolve, launchUrl.toString())
+      } catch {
+        // Keep reading until Harness prints a complete URL.
+      }
+    })
+
+    child.stderr.on('data', (chunk) => {
+      stderr = (stderr + chunk.toString()).slice(-65536)
+    })
+
+    child.once('error', (error) => finish(reject, error))
+    child.once('exit', (code, signal) => {
+      const detail = stderr.trim() || stdout.trim()
+      finish(reject, new Error(`Embedded Harness exited before startup (code=${code}, signal=${signal}).${detail ? `\n${detail}` : ''}`))
+    })
   })
 }
 
@@ -70,10 +97,13 @@ async function startCore() {
   const core = corePath()
   const node = path.join(core, 'node.exe')
   const cli = path.join(core, 'harness', 'lib', 'bin.js')
-  coreProcess = spawn(node, [cli, 'web', '--host', HOST, '--port', String(PORT), '--no-open'], { cwd: path.join(core, 'harness'), windowsHide: true, stdio: 'ignore' })
-  coreProcess.once('error', (error) => logError(error))
-  await waitForServer()
-  await mainWindow.loadURL(`http://${HOST}:${PORT}`)
+  coreProcess = spawn(node, [cli, 'web', '--host', HOST, '--port', String(PORT), '--no-open'], {
+    cwd: path.join(core, 'harness'),
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  const launchUrl = await waitForLaunchUrl(coreProcess)
+  await mainWindow.loadURL(launchUrl)
 }
 
 app.whenReady().then(async () => {
