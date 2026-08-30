@@ -187,14 +187,17 @@ jobs:
           VERSION: ${{ steps.sync.outputs.version }}
           RELEASE_SHA: ${{ steps.commit.outputs.sha || steps.current.outputs.sha }}
         run: |
+          $bundle = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron\t\dist"
+          $installer = Get-ChildItem -LiteralPath $bundle -Filter '*-setup.exe' | Select-Object -First 1
+          $latestYml = Join-Path $bundle 'latest.yml'
+          $blockmap = if ($installer) { "$($installer.FullName).blockmap" }
+          if (!$installer -or !(Test-Path -LiteralPath $latestYml) -or !(Test-Path -LiteralPath $blockmap)) {
+            throw 'Electron build did not produce the installer update assets.'
+          }
+          gh release create $env:TAG --target $env:RELEASE_SHA --title "DeepSeek Harness Desktop $env:VERSION" --generate-notes `
+            $installer.FullName $latestYml $blockmap
           $oldReleases = gh release list --limit 100 --json tagName | ConvertFrom-Json |
-            Where-Object { $_.tagName -like 'desktop-v*' }
+            Where-Object { $_.tagName -like 'desktop-v*' -and $_.tagName -ne $env:TAG }
           foreach ($old in $oldReleases) {
             gh release delete $old.tagName --yes --cleanup-tag
           }
-          $bundle = Join-Path $env:GITHUB_WORKSPACE ".dsh-build-$env:GITHUB_RUN_ID\electron\t\dist"
-          $assets = Get-ChildItem $bundle -Recurse -File |
-            Where-Object { $_.Extension -in @('.exe', '.yml', '.blockmap') -or $_.Name -eq 'latest.json' } |
-            ForEach-Object { $_.FullName }
-          if ($assets.Count -eq 0) { throw 'Electron build did not produce release assets.' }
-          gh release create $env:TAG --target $env:RELEASE_SHA --title "DeepSeek Harness Desktop $env:VERSION" --generate-notes $assets
